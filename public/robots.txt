@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://emehz.github.io/OrionFlare/sitemap.xml

@@ -1,0 +1,369 @@
+@import '@fontsource/dela-gothic-one/400.css';
+@import '@fontsource/zen-kaku-gothic-new/400.css';
+@import '@fontsource/zen-kaku-gothic-new/700.css';
+
+:root {
+  --tinta: #0b0b0c;
+  --tinta-2: #141416;
+  --tinta-3: #1d1d20;
+  --linea: #2c2c30;
+  --papel: #f2f0ea;
+  --papel-2: #e4e1d8;
+  --gris: #a8a49a; /* texto secundario sobre tinta: 7.6:1 */
+  --gris-oscuro: #55524b; /* texto secundario sobre papel: 7:1 */
+  --bermellon: #e5381e;
+  --bermellon-hundido: #c22d16;
+  --ok: #7fd18b;
+  --aviso: #f2c14e;
+
+  --display: 'Dela Gothic One', 'Zen Kaku Gothic New', system-ui, sans-serif;
+  --texto: 'Zen Kaku Gothic New', system-ui, sans-serif;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --margen: clamp(16px, 4vw, 56px);
+  --radio: 2px;
+
+  color-scheme: dark;
+  font-family: var(--texto);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--papel);
+  background: var(--tinta);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-color: var(--linea) var(--tinta);
+}
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--tinta);
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--bermellon);
+  color: var(--tinta);
+}
+
+img,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--bermellon);
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.solo-lectores {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.saltar {
+  position: fixed;
+  left: 12px;
+  top: -60px;
+  z-index: 100;
+  background: var(--papel);
+  color: var(--tinta);
+  padding: 10px 14px;
+  font-weight: 700;
+  transition: top 160ms var(--ease-out);
+}
+.saltar:focus {
+  top: 12px;
+}
+
+/* ───── Botones ───── */
+.boton {
+  --fondo: var(--bermellon);
+  --color: var(--tinta);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  min-height: 52px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: var(--radio);
+  background: var(--fondo);
+  color: var(--color);
+  font-family: var(--display);
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-out), background-color 200ms ease, box-shadow 200ms ease;
+  box-shadow: 0 10px 30px -12px rgb(229 56 30 / 0.55);
+  -webkit-tap-highlight-color: transparent;
+}
+.boton:active {
+  transform: scale(0.97);
+}
+@media (hover: hover) and (pointer: fine) {
+  .boton:hover {
+    background: var(--bermellon-hundido);
+  }
+}
+.boton[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.boton--fantasma {
+  --fondo: transparent;
+  --color: var(--papel);
+  box-shadow: inset 0 0 0 1px var(--linea);
+  font-family: var(--texto);
+  font-weight: 700;
+}
+@media (hover: hover) and (pointer: fine) {
+  .boton--fantasma:hover {
+    background: var(--tinta-3);
+  }
+}
+.boton--papel {
+  --fondo: var(--papel);
+  --color: var(--tinta);
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .boton--papel:hover {
+    background: var(--papel-2);
+  }
+}
+.boton svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+/* ───── Cabecera ───── */
+.cabecera {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px var(--margen);
+  pointer-events: none;
+}
+.cabecera > * {
+  pointer-events: auto;
+}
+.cabecera::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgb(11 11 12 / 0.85), rgb(11 11 12 / 0));
+  pointer-events: none;
+  z-index: -1;
+}
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+.marca img {
+  width: 40px;
+  height: auto;
+}
+.marca img.marca__logotipo {
+  width: clamp(128px, 14vw, 168px);
+}
+.pie .marca img.marca__logotipo {
+  width: 200px;
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2.4vw, 28px);
+}
+.nav a:not(.boton) {
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--gris);
+  transition: color 160ms ease;
+}
+.nav a:not(.boton):hover,
+.nav a[aria-current='page'] {
+  color: var(--papel);
+}
+.nav .boton {
+  min-height: 42px;
+  padding: 0 18px;
+  font-size: 0.92rem;
+}
+@media (max-width: 760px) {
+  .nav a:not(.boton) {
+    display: none;
+  }
+}
+
+/* ───── WhatsApp flotante ───── */
+.wa {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--papel);
+  color: var(--tinta);
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-decoration: none;
+  box-shadow: 0 12px 30px -10px rgb(0 0 0 / 0.6);
+  transition: transform 160ms var(--ease-out);
+}
+.wa:active {
+  transform: scale(0.96);
+}
+.wa svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ───── Pie ───── */
+.pie {
+  position: relative;
+  z-index: 2;
+  background: var(--tinta);
+  border-top: 1px solid var(--linea);
+  padding: 64px var(--margen) 96px;
+  display: grid;
+  gap: 40px;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+}
+.pie h2 {
+  font-size: 1rem;
+  margin-bottom: 14px;
+}
+.pie ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  color: var(--gris);
+}
+.pie a {
+  color: var(--gris);
+}
+.pie a:hover {
+  color: var(--papel);
+}
+.pie__marca p {
+  color: var(--gris);
+  max-width: 36ch;
+  margin-top: 14px;
+}
+.pie__vertical {
+  font-family: var(--display);
+  writing-mode: vertical-rl;
+  font-size: 2.2rem;
+  line-height: 1;
+  color: var(--tinta-3);
+  position: absolute;
+  right: var(--margen);
+  top: 56px;
+  user-select: none;
+}
+@media (max-width: 760px) {
+  .pie {
+    grid-template-columns: 1fr;
+  }
+  .pie__vertical {
+    display: none;
+  }
+}
+
+/* ───── Etiquetas de reglas (3D) ───── */
+.regla-etiqueta {
+  font-family: var(--texto);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--tinta);
+  background: var(--bermellon);
+  padding: 2px 7px;
+  white-space: nowrap;
+  border-radius: 2px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.regla-etiqueta--v {
+  transform: translateY(-50%);
+}
+
+/* ───── Utilidades de textura ───── */
+.trama {
+  background-image: radial-gradient(circle, rgb(242 240 234 / 0.16) 1.1px, transparent 1.6px);
+  background-size: 7px 7px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

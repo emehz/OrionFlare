@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="es-SV">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Orion Flare</title>
+    <script>
+      // GitHub Pages no sabe de rutas como /crear: guardamos la ruta y volvemos a la app.
+      sessionStorage.setItem('ruta-pendiente', location.pathname + location.search + location.hash)
+      location.replace('/OrionFlare/')
+    </script>
+  </head>
+  <body style="background:#0b0b0c"></body>
+</html>

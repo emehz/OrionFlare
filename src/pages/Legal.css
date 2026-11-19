@@ -1,0 +1,39 @@
+.legal {
+  background: var(--papel);
+  color: var(--tinta);
+  padding: 128px var(--margen) 96px;
+  min-height: 100svh;
+}
+.legal > * {
+  max-width: 44rem;
+}
+.legal h1 {
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+}
+.legal__fecha {
+  margin-top: 12px;
+  color: var(--gris-oscuro);
+  font-size: 0.9rem;
+}
+.legal__cuerpo {
+  margin-top: 40px;
+  display: grid;
+  gap: 14px;
+  font-size: 1.02rem;
+  line-height: 1.7;
+}
+.legal__cuerpo h2 {
+  font-size: 1.25rem;
+  margin-top: 22px;
+}
+.legal__cuerpo ul,
+.legal__cuerpo ol {
+  margin: 0;
+  padding-left: 1.3em;
+  display: grid;
+  gap: 8px;
+}
+.legal ::selection {
+  background: var(--tinta);
+  color: var(--papel);
+}
