@@ -11,16 +11,18 @@ import { urlPublica } from './rutas'
  * Mientras se descarga, se usa el modelo generado en código (prenda3d.ts).
  */
 
-// talla base con la que se simuló cada corte (pulgadas) — debe coincidir con CORTES en blender/camisa.py
+// talla base de cada modelo (pulgadas).
+// "mockup" es la camiseta del mockup de Brock Creative (blender/mockup.py), preparada como L unisex 22 × 29":
+// se usa para todos los cortes de manga corta y cuello redondo. Los demás salen de blender/camisa.py.
 const BASE: Record<string, { archivo: string; ancho: number; largo: number }> = {
-  unisex: { archivo: 'regular', ancho: 22, largo: 29 },
-  oversize: { archivo: 'oversize', ancho: 24, largo: 29 },
+  unisex: { archivo: 'mockup', ancho: 22, largo: 29 },
+  oversize: { archivo: 'mockup', ancho: 22, largo: 29 },
+  'dama-redondo': { archivo: 'mockup', ancho: 22, largo: 29 },
+  infantil: { archivo: 'mockup', ancho: 22, largo: 29 },
   'manga-larga': { archivo: 'larga', ancho: 22, largo: 29 },
   'sin-manga': { archivo: 'sin', ancho: 22, largo: 29 },
-  'dama-redondo': { archivo: 'dama', ancho: 19.125, largo: 26.25 },
   'dama-v': { archivo: 'dama-v', ancho: 19.125, largo: 26 },
   crop: { archivo: 'crop', ancho: 20, largo: 17 },
-  infantil: { archivo: 'infantil', ancho: 14.5, largo: 20 },
 }
 
 const cargador = new GLTFLoader()
@@ -123,6 +125,16 @@ export function cargarModeloBlender(prenda: Prenda, talla: Talla): Promise<Model
         const sy = L / (b.largo * PULGADA)
         const geo = escalar(base, sx, sy)
         const P = parametros(prenda, talla)
+        // medidas reales de la manga según el patrón del modelo
+        const za = geo.attributes.aZona.array as Float32Array
+        const ca = geo.attributes.aCm.array as Float32Array
+        let largoManga = 0, minX = Infinity, maxX = -Infinity
+        for (let i = 0; i < za.length; i++) {
+          if (za[i] !== 2) continue
+          largoManga = Math.max(largoManga, ca[i * 2 + 1])
+          minX = Math.min(minX, ca[i * 2])
+          maxX = Math.max(maxX, ca[i * 2])
+        }
         return {
           cuerpo: geo,
           mangas: null,
@@ -131,8 +143,8 @@ export function cargarModeloBlender(prenda: Prenda, talla: Talla): Promise<Model
           abajo: -L / 2,
           ancho: W,
           largo: L,
-          largoManga: prenda.manga === 'sin' ? 0 : P.largoManga,
-          contornoManga: 2 * P.sisa,
+          largoManga: prenda.manga === 'sin' ? 0 : largoManga || P.largoManga,
+          contornoManga: maxX > minX ? maxX - minX : 2 * P.sisa,
           profCuelloEspalda: P.profEspalda,
           punto: buscador(geo),
         }

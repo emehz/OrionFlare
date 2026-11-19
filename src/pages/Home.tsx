@@ -11,7 +11,7 @@ import { COLORES, PRENDAS, areaMaxima, medidasCm, type Prenda, type Talla } from
 import { MUESTRAS, muestraAlAzar, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
 import { useMuestra, useLogo, conFondo, lienzoMuestra, lienzoLogo } from '../lib/useMuestra'
 import type { Zona } from '../lib/prenda3d'
-import { cargarModeloBlender } from '../lib/prendaBlender'
+import { cargarModeloBlender, useModeloCamisa } from '../lib/prendaBlender'
 import { Tallas } from '../components/Tallas'
 import { Precios } from '../components/Precios'
 import { Preguntas } from '../components/Preguntas'
@@ -127,11 +127,13 @@ interface EstadoPortada {
 let fijarEstado: (p: Partial<EstadoPortada>) => void = () => {}
 let leerEstado: EstadoPortada
 
-function disenoPara(id: string, lienzo: HTMLCanvasElement | null, prenda: Prenda, talla: Talla, zona: Zona): DisenoEnPrenda | null {
+function disenoPara(id: string, lienzo: HTMLCanvasElement | null, prenda: Prenda, talla: Talla, zona: Zona, largoManga = 20): DisenoEnPrenda | null {
   if (!lienzo) return null
   if (zona === 'mangaIzq' || zona === 'mangaDer') {
-    const ancho = 7
-    return { id, zona, imagen: lienzo, anchoCm: ancho, altoCm: (ancho * lienzo.height) / lienzo.width, x: 0, y: 4 }
+    // logo pequeño en la punta de la manga, justo encima del dobladillo
+    const ancho = 5
+    const alto = (ancho * lienzo.height) / lienzo.width
+    return { id, zona, imagen: lienzo, anchoCm: ancho, altoCm: alto, x: 0, y: Math.max(1.5, largoManga - alto - 2.2) }
   }
   const max = areaMaxima(prenda, talla)
   let ancho = Math.min(max.ancho * 0.8, 28)
@@ -157,15 +159,16 @@ function CamisaPortada() {
   const frente = useMuestra(e.muestra, tinta)
   const espalda = useMuestra(e.muestraEspalda, tinta)
   const logo = useLogo(tinta)
+  const modelo = useModeloCamisa(e.prenda, e.talla)
   const frenteFinal = useMemo(() => (e.sucio && frente ? conFondo(frente) : frente), [e.sucio, frente])
   const disenos = useMemo(
     () =>
       [
         disenoPara('frente', frenteFinal, e.prenda, e.talla, 'frente'),
         disenoPara('espalda', espalda, e.prenda, e.talla, 'espalda'),
-        e.prenda.manga !== 'sin' ? disenoPara('manga', logo, e.prenda, e.talla, 'mangaIzq') : null,
+        e.prenda.manga !== 'sin' ? disenoPara('manga', logo, e.prenda, e.talla, 'mangaIzq', modelo.largoManga) : null,
       ].filter((d): d is DisenoEnPrenda => d !== null),
-    [frenteFinal, espalda, logo, e.prenda, e.talla],
+    [frenteFinal, espalda, logo, e.prenda, e.talla, modelo.largoManga],
   )
   return <Camisa3D prenda={e.prenda} talla={e.talla} color={color} disenos={disenos} activo={e.reglas ? 'frente' : null} medidas={e.reglas} />
 }

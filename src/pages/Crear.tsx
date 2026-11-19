@@ -11,7 +11,8 @@ import { calcularPrecio, formatoUSD, NOTA_ENVIO } from '../data/precios'
 import { NEGOCIO, enlaceWhatsApp } from '../data/negocio'
 import { MUESTRAS, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
 import { lienzoMuestra } from '../lib/useMuestra'
-import { modeloCamisa, type Zona } from '../lib/prenda3d'
+import type { Zona } from '../lib/prenda3d'
+import { useModeloCamisa } from '../lib/prendaBlender'
 import {
   aBlob, calidadDPI, cargarArchivo, dpiEfectivo, exportarImpresion, mejorarCalidad,
   quitarFondoIA, quitarFondoLiso, recortarTransparente, tieneTransparencia,
@@ -109,7 +110,7 @@ export default function Crear() {
   const entrada = useRef<HTMLInputElement>(null)
 
   const medidas = medidasCm(talla)
-  const modelo = useMemo(() => modeloCamisa(prenda, talla), [prenda, talla])
+  const modelo = useModeloCamisa(prenda, talla)
   const conMangas = prenda.manga !== 'sin'
   const zonas: Zona[] = conMangas ? ['frente', 'espalda', 'mangaIzq', 'mangaDer'] : ['frente', 'espalda']
 
@@ -120,12 +121,14 @@ export default function Crear() {
   // límites de tamaño y posición de cada zona
   function limites(z: Zona) {
     if (z === 'mangaIzq' || z === 'mangaDer') {
-      const ancho = Math.min(10, Math.floor(modelo.contornoManga * 0.42))
-      const alto = Math.max(4, Math.min(10, Math.floor(modelo.largoManga - 4)))
-      return { ancho, alto, largo: modelo.largoManga, mitad: modelo.contornoManga * 0.25, minAncho: 2 }
+      // Mangas: solo diseños pequeños en la punta, por fuera, donde la manga descansa sobre el brazo
+      const largo = modelo.largoManga
+      const ancho = Math.max(3, Math.min(8, Math.floor(modelo.contornoManga * 0.3)))
+      const alto = Math.max(3, Math.min(6, Math.floor(largo * 0.3)))
+      return { ancho, alto, largo, mitad: Math.min(6, modelo.contornoManga * 0.18), minAncho: 2, yMin: Math.max(1.5, largo * 0.45), margenAbajo: 2 }
     }
     const max = areaMaxima(prenda, talla)
-    return { ancho: max.ancho, alto: max.alto, largo: medidas.largo, mitad: medidas.ancho / 2, minAncho: 3 }
+    return { ancho: max.ancho, alto: max.alto, largo: medidas.largo, mitad: medidas.ancho / 2, minAncho: 3, yMin: 1.5, margenAbajo: 4 }
   }
 
   const altoDe = (c: Capa, ancho = c.anchoCm) => (ancho * c.actual.height) / c.actual.width
@@ -136,12 +139,12 @@ export default function Crear() {
     if (altoDe(c, ancho) > l.alto) ancho = (l.alto * c.actual.width) / c.actual.height
     const alto = altoDe(c, ancho)
     const limX = Math.max(0, l.mitad - ancho / 2 - 1.5)
-    const margenAbajo = c.zona.startsWith('manga') ? 2.5 : 4
+    const yMax = Math.max(l.yMin, l.largo - alto - l.margenAbajo)
     return {
       ...c,
       anchoCm: Math.round(ancho * 10) / 10,
       x: Math.min(Math.max(c.x, -limX), limX),
-      y: Math.min(Math.max(c.y, 1.5), Math.max(1.5, l.largo - alto - margenAbajo)),
+      y: Math.min(Math.max(c.y, l.yMin), yMax),
     }
   }
 
@@ -166,7 +169,8 @@ export default function Crear() {
 
   function posicionInicial(z: Zona) {
     const enZona = capas.filter((c) => c.zona === z).length
-    if (z.startsWith('manga')) return { anchoCm: 7, y: 3 + enZona * 9, x: 0 }
+    // en la manga va pegado al borde (la punta); limitar() lo deja justo encima del dobladillo
+    if (z.startsWith('manga')) return { anchoCm: 6, y: 999, x: 0 }
     return { anchoCm: enZona ? 10 : Math.min(28, limites(z).ancho * 0.8), y: (z === 'frente' ? 9 : 7) + enZona * 12, x: 0 }
   }
 
@@ -438,7 +442,7 @@ export default function Crear() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5" /><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
                 <p><strong>Sube una imagen</strong> para {NOMBRE_ZONA[zona].toLowerCase()}</p>
                 <p className="soltar__ayuda">
-                  PNG, JPG o WEBP de hasta 25 MB.{zona.startsWith('manga') ? ` En la manga cabe hasta ${lim.ancho} × ${lim.alto} cm.` : ' Mientras más grande, mejor se imprime.'}
+                  PNG, JPG o WEBP de hasta 25 MB.{zona.startsWith('manga') ? ` Va en la punta de la manga, por fuera: hasta ${lim.ancho} × ${lim.alto} cm.` : ' Mientras más grande, mejor se imprime.'}
                 </p>
                 <button type="button" className="boton boton--papel" onClick={() => entrada.current?.click()}>Elegir archivo</button>
                 <input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" className="solo-lectores" tabIndex={-1} onChange={(e) => { subir(e.target.files?.[0]); e.target.value = '' }} />
@@ -492,7 +496,7 @@ export default function Crear() {
                 <p className="control__dato">Alto: <strong>{altoDe(activa).toFixed(1)} cm</strong> · máximo en {NOMBRE_ZONA[zona].toLowerCase()}: {lim.ancho} × {lim.alto} cm</p>
                 <label className="control">
                   <span>{zona.startsWith('manga') ? 'Distancia desde la costura del hombro' : 'Distancia desde el hombro'} <output>{activa.y.toFixed(1)} cm</output></span>
-                  <input type="range" min={1.5} max={Math.max(1.5, lim.largo - altoDe(activa) - (zona.startsWith('manga') ? 2.5 : 4))} step={0.5} value={activa.y} onChange={(e) => actualizar({ y: Number(e.target.value) })} />
+                  <input type="range" min={lim.yMin} max={Math.max(lim.yMin, lim.largo - altoDe(activa) - lim.margenAbajo)} step={0.5} value={activa.y} onChange={(e) => actualizar({ y: Number(e.target.value) })} />
                 </label>
                 <label className="control">
                   <span>Posición horizontal <output>{activa.x === 0 ? 'centrado' : `${Math.abs(activa.x).toFixed(1)} cm a la ${activa.x > 0 ? 'derecha' : 'izquierda'}`}</output></span>
