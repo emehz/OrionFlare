@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
 import { Environment, Lightformer, PerformanceMonitor } from '@react-three/drei'
@@ -31,8 +31,14 @@ function SombraSuave({ y }: { y: number }) {
 
 /** Escenario común: luz de estudio sin descargar mapas de entorno externos. */
 export function Escena({ children, camara = [0, 0, 150], sombraY = -42, className, capturable = false, fondo }: { children: ReactNode; camara?: [number, number, number]; sombraY?: number; className?: string; capturable?: boolean; fondo?: string }) {
-  // resolución adaptativa: si el equipo no llega a ~50 FPS, se dibuja con menos píxeles
-  const [dpr, setDpr] = useState(() => Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 1.5))
+  // Resolución adaptativa. En pantallas grandes se empieza en 1.25× como máximo (la diferencia no se nota
+  // en una camisa que se mueve) y si el equipo no llega a una animación fluida se baja sola, hasta 0.6×.
+  const tope = () => Math.min(window.devicePixelRatio || 1, window.innerWidth > 1200 ? 1.25 : 1.5)
+  const [dpr, setDpr] = useState(() => (typeof window !== 'undefined' ? tope() : 1))
+  useEffect(() => {
+    // lo lee el medidor de FPS (?fps)
+    ;(window as unknown as { __orionDpr?: number }).__orionDpr = dpr
+  }, [dpr])
   return (
     <Canvas
       className={className}
@@ -46,11 +52,12 @@ export function Escena({ children, camara = [0, 0, 150], sombraY = -42, classNam
     >
       {fondo && <color attach="background" args={[fondo]} />}
       <PerformanceMonitor
-        bounds={() => [45, 58]}
-        onDecline={() => setDpr((d) => Math.max(0.75, +(d - 0.25).toFixed(2)))}
-        onIncline={() => setDpr((d) => Math.min(Math.min(window.devicePixelRatio, 1.5), +(d + 0.25).toFixed(2)))}
-        flipflops={3}
-        onFallback={() => setDpr(1)}
+        // límites según la frecuencia del monitor (60, 120, 144 Hz…)
+        bounds={(hz) => (hz > 90 ? [Math.min(70, hz * 0.55), hz * 0.85] : [45, 57])}
+        onDecline={() => setDpr((d) => Math.max(0.6, +(d - 0.2).toFixed(2)))}
+        onIncline={() => setDpr((d) => Math.min(tope(), +(d + 0.15).toFixed(2)))}
+        flipflops={4}
+        onFallback={() => setDpr(0.8)}
       />
       <ambientLight intensity={0.25} />
       <directionalLight position={[-60, 90, 120]} intensity={1.6} />

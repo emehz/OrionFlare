@@ -69,6 +69,8 @@ export interface UniformsTela {
   uLag: { value: number }
   uSway: { value: THREE.Vector2 }
   uEscalaCm: { value: THREE.Vector2 }
+  uBrillo: { value: THREE.Color }
+  uBrilloFuerza: { value: number }
 }
 
 export function crearMaterialTela() {
@@ -86,15 +88,16 @@ export function crearMaterialTela() {
     uLag: { value: 0 },
     uSway: { value: new THREE.Vector2() },
     uEscalaCm: { value: new THREE.Vector2(1, 1) },
+    uBrillo: { value: new THREE.Color('#555555') },
+    uBrilloFuerza: { value: 0.45 },
   }
 
-  const material = new THREE.MeshPhysicalMaterial({
+  // MeshStandardMaterial + un "brillo de pelusa" barato en el borde (fresnel).
+  // El sheen físico de MeshPhysicalMaterial se ve parecido pero cuesta mucho más en gráficas integradas.
+  const material = new THREE.MeshStandardMaterial({
     color: '#121214',
     roughness: 0.94,
     metalness: 0,
-    sheen: 1,
-    sheenRoughness: 0.7,
-    sheenColor: new THREE.Color('#555555'),
     normalMap: texturaTejido(),
     normalScale: new THREE.Vector2(0.28, 0.28),
     side: THREE.DoubleSide,
@@ -160,6 +163,8 @@ export function crearMaterialTela() {
         uniform vec4 uEtiquetaRect;
         uniform float uLargo;
         uniform float uLargoManga;
+        uniform vec3 uBrillo;
+        uniform float uBrilloFuerza;
 
         // contorno y cotas del diseño seleccionado (en cm sobre la tela)
         float lineasGuia(vec2 p, vec4 r, float abajo) {
@@ -178,6 +183,13 @@ export function crearMaterialTela() {
           if ((abs(p.y - a.y) < w || abs(p.y - b.y) < w) && abs(p.x - cx) < 0.7) g = 1.0;
           return g;
         }`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        // pelusa del algodón: se aclara en los bordes que miran de lado a la cámara
+        float bordeTela = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
+        totalEmissiveRadiance += uBrillo * uBrilloFuerza * pow(bordeTela, 3.0) * (gl_FrontFacing ? 1.0 : 0.25);`,
       )
       .replace(
         '#include <color_fragment>',
@@ -203,6 +215,6 @@ export function crearMaterialTela() {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.898, 0.22, 0.118), guia);`,
       )
   }
-  material.customProgramCacheKey = () => 'tela-orion-v3'
+  material.customProgramCacheKey = () => 'tela-orion-v4'
   return { material, uniforms: u }
 }

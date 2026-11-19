@@ -85,11 +85,10 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
   // Color de la tela (idéntico en todas las piezas)
   useLayoutEffect(() => {
     material.color.set(color.hex)
-    // el "sheen" imita la pelusa del algodón; en telas oscuras se mantiene sutil para que el negro siga siendo negro
-    const brillo = new THREE.Color(color.hex).lerp(new THREE.Color('#ffffff'), color.claro ? 0.1 : 0.16)
-    material.sheenColor.copy(brillo)
-    material.sheen = color.claro ? 0.6 : 0.45
-  }, [color, material])
+    // brillo de pelusa del algodón: en telas oscuras es sutil para que el negro siga siendo negro
+    uniforms.uBrillo.value.copy(new THREE.Color(color.hex).lerp(new THREE.Color('#ffffff'), color.claro ? 0.25 : 0.4))
+    uniforms.uBrilloFuerza.value = color.claro ? 0.35 : 0.5
+  }, [color, material, uniforms])
 
   // Diseños: solo se actualizan números y referencias a texturas
   useLayoutEffect(() => {
