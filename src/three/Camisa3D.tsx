@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import { modeloCamisa, INDICE_ZONA, type Zona } from '../lib/prenda3d'
+import { INDICE_ZONA, type Zona } from '../lib/prenda3d'
+import { useModeloCamisa } from '../lib/prendaBlender'
 import { crearMaterialTela, MAX_DISENOS } from './materialTela'
 import type { ColorPrenda, Prenda, Talla } from '../data/prendas'
 import { urlPublica } from '../lib/rutas'
@@ -77,7 +78,7 @@ function texturaEtiqueta(url: string) {
 const reducido = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas = false }: Camisa3DProps) {
-  const modelo = useMemo(() => modeloCamisa(prenda, talla), [prenda, talla])
+  const modelo = useModeloCamisa(prenda, talla)
   const [{ material, uniforms }] = useState(() => crearMaterialTela())
   const grupo = useRef<THREE.Group>(null)
 
@@ -173,7 +174,7 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
     <group ref={grupo}>
       <mesh geometry={modelo.cuerpo} material={material} />
       {modelo.mangas && <mesh geometry={modelo.mangas} material={material} />}
-      <mesh geometry={modelo.cuello} material={material} />
+      {modelo.cuello && <mesh geometry={modelo.cuello} material={material} />}
       {sel && etiquetas3d?.arriba && (
         <Html position={etiquetas3d.arriba.pos.clone().addScaledVector(etiquetas3d.arriba.normal, 1)} center className="regla-etiqueta" zIndexRange={[5, 0]}>
           {sel.anchoCm.toFixed(1)} cm

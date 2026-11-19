@@ -27,6 +27,20 @@ Abre http://localhost:5173.
 | Textos de las políticas | `src/pages/Legal.tsx` |
 | Diseños de ejemplo | `src/lib/muestras.ts` |
 
+## Camisas 3D (Blender)
+
+Los modelos de `public/modelos/camisas/*.glb` salen de una simulación de tela real en Blender
+(maniquí invisible + camisa cosida con las medidas de la tabla, que cae con gravedad).
+Para regenerarlos (por ejemplo, si cambias medidas o rigidez de la tela en `blender/camisa.py`):
+
+```powershell
+& "E:\Blender\blender.exe" -b --factory-startup --python blender/camisa.py -- --corte regular --salida public/modelos/camisas/regular.glb --render render
+```
+
+Cortes: `regular`, `oversize`, `larga`, `sin`, `dama`, `dama-v`, `crop`, `infantil`. Con `--render <carpeta>` deja
+imágenes de frente, tres cuartos y espalda para revisar el resultado. Cada corte se simula en una talla base
+y la web lo escala a las demás tallas (`src/lib/prendaBlender.ts`).
+
 ## Publicar en GitHub Pages (una sola vez)
 
 1. Crea un repositorio **público** llamado `OrionFlare` en la cuenta `emehz`.

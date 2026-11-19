@@ -19,7 +19,7 @@ export const INDICE_ZONA: Record<Zona, number> = { frente: 0, espalda: 1, mangaI
 export interface ModeloCamisa {
   cuerpo: THREE.BufferGeometry
   mangas: THREE.BufferGeometry | null
-  cuello: THREE.BufferGeometry
+  cuello: THREE.BufferGeometry | null
   arriba: number
   abajo: number
   ancho: number
@@ -47,7 +47,7 @@ function ruido(x: number, y: number) {
   )
 }
 
-interface Parametros {
+export interface Parametros {
   W: number
   L: number
   arriba: number
@@ -66,7 +66,7 @@ interface Parametros {
   cuelloV: boolean
 }
 
-function parametros(prenda: Prenda, talla: Talla): Parametros {
+export function parametros(prenda: Prenda, talla: Talla): Parametros {
   const { ancho: W, largo: L } = medidasCm(talla)
   const over = prenda.corte === 'oversize'
   const dama = prenda.corte === 'dama' || prenda.corte === 'crop'
@@ -75,8 +75,8 @@ function parametros(prenda: Prenda, talla: Talla): Parametros {
   let boca = W * (over ? 0.42 : dama ? 0.3 : 0.33)
   if (prenda.manga === 'larga') {
     largoManga = L * 0.8
-    angulo = 70
-    boca = W * 0.18
+    angulo = 62
+    boca = W * 0.2
   }
   return {
     W, L,

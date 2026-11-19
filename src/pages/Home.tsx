@@ -10,7 +10,8 @@ import { Camisa3D, texturaDe, type DisenoEnPrenda } from '../three/Camisa3D'
 import { COLORES, PRENDAS, areaMaxima, medidasCm, type Prenda, type Talla } from '../data/prendas'
 import { MUESTRAS, muestraAlAzar, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
 import { useMuestra, useLogo, conFondo, lienzoMuestra, lienzoLogo } from '../lib/useMuestra'
-import { modeloCamisa, type Zona } from '../lib/prenda3d'
+import type { Zona } from '../lib/prenda3d'
+import { cargarModeloBlender } from '../lib/prendaBlender'
 import { Tallas } from '../components/Tallas'
 import { Precios } from '../components/Precios'
 import { Preguntas } from '../components/Preguntas'
@@ -199,13 +200,12 @@ export default function Home() {
 
   // Prepara de antemano las camisas que aparecen al hacer scroll, para que el cambio no dé tirones
   useEffect(() => {
-    const pendientes: [Prenda, string][] = [[OVERSIZE, 'XL'], [OVERSIZE, '2XL'], [UNISEX, 'M']]
+    const pendientes: [Prenda, string][] = [[UNISEX, 'L'], [OVERSIZE, 'XL'], [OVERSIZE, '2XL'], [UNISEX, 'M']]
     const ocioso = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn) : setTimeout(fn, 200))
     const siguiente = () => {
       const p = pendientes.shift()
       if (!p) return
-      modeloCamisa(p[0], tallaDe(p[0], p[1]))
-      ocioso(siguiente)
+      cargarModeloBlender(p[0], tallaDe(p[0], p[1])).finally(() => ocioso(siguiente))
     }
     ocioso(siguiente)
   }, [])
