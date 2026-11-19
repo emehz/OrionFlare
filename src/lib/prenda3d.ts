@@ -20,6 +20,8 @@ export interface ModeloCamisa {
   cuerpo: THREE.BufferGeometry
   mangas: THREE.BufferGeometry | null
   cuello: THREE.BufferGeometry | null
+  /** escala (ancho, alto) que se aplica al objeto y a las coordenadas de patrón; 1 si la geometría ya está a tamaño real */
+  escala?: [number, number]
   arriba: number
   abajo: number
   ancho: number

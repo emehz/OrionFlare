@@ -1,9 +1,7 @@
 import { Suspense, useMemo, useState, type ReactNode } from 'react'
 import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
-import { Environment, Lightformer, PerformanceMonitor, Stats } from '@react-three/drei'
-
-const mostrarFps = typeof location !== 'undefined' && new URLSearchParams(location.search).has('fps')
+import { Environment, Lightformer, PerformanceMonitor } from '@react-three/drei'
 
 /**
  * Sombra suave del piso: una imagen con un degradado, dibujada una sola vez.
@@ -66,7 +64,6 @@ export function Escena({ children, camara = [0, 0, 150], sombraY = -42, classNam
       </Suspense>
       <Suspense fallback={null}>{children}</Suspense>
       <SombraSuave y={sombraY} />
-      {mostrarFps && <Stats />}
     </Canvas>
   )
 }

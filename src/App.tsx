@@ -3,6 +3,7 @@ import { Route, Routes, useLocation } from 'react-router-dom'
 import { Cabecera } from './components/Cabecera'
 import { Pie } from './components/Pie'
 import { BotonWhatsApp } from './components/BotonWhatsApp'
+import { MedidorFps } from './components/MedidorFps'
 
 const Inicio = lazy(() => import('./pages/Home'))
 const Crear = lazy(() => import('./pages/Crear'))
@@ -42,6 +43,7 @@ export default function App() {
       </main>
       {pathname !== '/crear' && <Pie />}
       {pathname !== '/crear' && <BotonWhatsApp />}
+      <MedidorFps />
     </>
   )
 }

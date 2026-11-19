@@ -104,12 +104,14 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
     uniforms.uGuia.value = activo ? 1 : 0
   }, [disenos, activo, uniforms])
 
+  const [sx, sy] = modelo.escala ?? [1, 1]
   useLayoutEffect(() => {
+    uniforms.uEscalaCm.value.set(sx, sy)
     uniforms.uLargo.value = modelo.largo
     uniforms.uLargoManga.value = modelo.largoManga
     const ancho = Math.min(8, modelo.ancho * 0.15)
     uniforms.uEtiquetaRect.value.set(-ancho / 2, modelo.profCuelloEspalda + 1, ancho, ancho * 0.54)
-  }, [modelo, uniforms])
+  }, [modelo, uniforms, sx, sy])
 
   useEffect(() => {
     let vivo = true
@@ -172,9 +174,11 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
 
   return (
     <group ref={grupo}>
-      <mesh geometry={modelo.cuerpo} material={material} />
-      {modelo.mangas && <mesh geometry={modelo.mangas} material={material} />}
-      {modelo.cuello && <mesh geometry={modelo.cuello} material={material} />}
+      <group scale={[sx, sy, sx]}>
+        <mesh geometry={modelo.cuerpo} material={material} />
+        {modelo.mangas && <mesh geometry={modelo.mangas} material={material} />}
+        {modelo.cuello && <mesh geometry={modelo.cuello} material={material} />}
+      </group>
       {sel && etiquetas3d?.arriba && (
         <Html position={etiquetas3d.arriba.pos.clone().addScaledVector(etiquetas3d.arriba.normal, 1)} center className="regla-etiqueta" zIndexRange={[5, 0]}>
           {sel.anchoCm.toFixed(1)} cm

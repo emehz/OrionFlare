@@ -253,14 +253,18 @@ export default function Home() {
 
     const ctx = gsap.context(() => {
       const caps = gsap.utils.toArray<HTMLElement>('[data-cap]')
+      // solo un capítulo manda a la vez (antes dos se encimaban en la transición y mezclaban
+      // el diseño "con fondo" de uno con el color de camisa del otro)
+      let capActual: Capitulo = 'inicio'
       caps.forEach((el) => {
         const cap = el.dataset.cap as Capitulo
         ScrollTrigger.create({
           trigger: el,
-          start: 'top 55%',
-          end: 'bottom 45%',
+          start: 'top 50%',
+          end: 'bottom 50%',
           onToggle: (st) => {
             if (!st.isActive) return
+            capActual = cap
             // sin estado de React: re-renderizar toda la portada aquí causaba un tirón al cambiar de camisa
             if (raiz.current) raiz.current.dataset.capitulo = cap
             objetivo.current = objetivoDe(cap, st.progress)
@@ -273,7 +277,7 @@ export default function Home() {
             fijarEstado(base)
           },
           onUpdate: (st) => {
-            if (!st.isActive) return
+            if (!st.isActive || capActual !== cap) return
             objetivo.current = objetivoDe(cap, st.progress)
             if (cap === 'prenda') {
               const colores = ['negro', 'marino', 'blanco', 'vino']

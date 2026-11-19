@@ -68,6 +68,7 @@ export interface UniformsTela {
   uLargoManga: { value: number }
   uLag: { value: number }
   uSway: { value: THREE.Vector2 }
+  uEscalaCm: { value: THREE.Vector2 }
 }
 
 export function crearMaterialTela() {
@@ -84,6 +85,7 @@ export function crearMaterialTela() {
     uLargoManga: { value: 20 },
     uLag: { value: 0 },
     uSway: { value: new THREE.Vector2() },
+    uEscalaCm: { value: new THREE.Vector2(1, 1) },
   }
 
   const material = new THREE.MeshPhysicalMaterial({
@@ -111,13 +113,15 @@ export function crearMaterialTela() {
         varying float vZona;
         varying vec2 vCm;
         uniform float uLag;
-        uniform vec2 uSway;`,
+        uniform vec2 uSway;
+        uniform vec2 uEscalaCm;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
         vZona = aZona;
-        vCm = aCm;
+        // la geometría se comparte entre tallas: las medidas de patrón se escalan aquí (mangas con el ancho)
+        vCm = aCm * (aZona > 1.5 ? vec2(uEscalaCm.x) : uEscalaCm);
         // física ligera: lo de abajo (ruedo, puños) se queda atrás al girar y se balancea
         float pesoFisica = aPeso * aPeso;
         float giro = uLag * pesoFisica;
@@ -199,6 +203,6 @@ export function crearMaterialTela() {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.898, 0.22, 0.118), guia);`,
       )
   }
-  material.customProgramCacheKey = () => 'tela-orion-v2'
+  material.customProgramCacheKey = () => 'tela-orion-v3'
   return { material, uniforms: u }
 }

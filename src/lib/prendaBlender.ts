@@ -89,43 +89,41 @@ function escalar(base: THREE.BufferGeometry, sx: number, sy: number) {
   return g
 }
 
-function buscador(geo: THREE.BufferGeometry) {
+function buscador(geo: THREE.BufferGeometry, sx: number, sy: number) {
   return (z: Zona, xCm: number, yCm: number) => {
     const iz = INDICE_ZONA[z]
     const za = geo.attributes.aZona.array as Float32Array
     const ca = geo.attributes.aCm.array as Float32Array
     const pa = geo.attributes.position.array as Float32Array
     const na = geo.attributes.normal.array as Float32Array
+    const ey = iz >= 2 ? sx : sy
     let mejor = -1, md = Infinity
     for (let i = 0; i < za.length; i++) {
       if (za[i] !== iz) continue
-      const d = (ca[i * 2] - xCm) ** 2 + (ca[i * 2 + 1] - yCm) ** 2
+      const d = (ca[i * 2] * sx - xCm) ** 2 + (ca[i * 2 + 1] * ey - yCm) ** 2
       if (d < md) { md = d; mejor = i }
     }
     if (mejor < 0) return null
     return {
-      pos: new THREE.Vector3(pa[mejor * 3], pa[mejor * 3 + 1], pa[mejor * 3 + 2]),
-      normal: new THREE.Vector3(na[mejor * 3], na[mejor * 3 + 1], na[mejor * 3 + 2]),
+      pos: new THREE.Vector3(pa[mejor * 3] * sx, pa[mejor * 3 + 1] * sy, pa[mejor * 3 + 2] * sx),
+      normal: new THREE.Vector3(na[mejor * 3] / sx, na[mejor * 3 + 1] / sy, na[mejor * 3 + 2] / sx).normalize(),
     }
   }
 }
 
-const escalados = new Map<string, Promise<ModeloCamisa>>()
-
-/** Modelo de Blender escalado a la talla (se guarda en caché). */
-export function cargarModeloBlender(prenda: Prenda, talla: Talla): Promise<ModeloCamisa> {
-  const clave = `${prenda.id}|${talla.talla}`
-  if (!escalados.has(clave)) {
-    const b = BASE[prenda.id] ?? BASE.unisex
-    escalados.set(
-      clave,
-      geometriaBase(b.archivo).then((base) => {
-        const { ancho: W, largo: L } = medidasCm(talla)
-        const sx = W / (b.ancho * PULGADA)
-        const sy = L / (b.largo * PULGADA)
-        const geo = escalar(base, sx, sy)
-        const P = parametros(prenda, talla)
-        // medidas reales de la manga según el patrón del modelo
+/*
+ * Cada archivo se procesa UNA vez y su geometría se comparte entre todas las tallas: cambiar de talla
+ * (o entre cortes que usan el mismo modelo) solo cambia la escala del objeto y un "uniform" del material.
+ * Antes se creaba una geometría nueva por talla y había que subirla a la tarjeta gráfica: eso daba el tirón.
+ */
+const procesadas = new Map<string, Promise<{ geo: THREE.BufferGeometry; largoManga: number; contornoManga: number }>>()
+function geometriaProcesada(archivo: string) {
+  if (!procesadas.has(archivo)) {
+    procesadas.set(
+      archivo,
+      geometriaBase(archivo).then((base) => {
+        const geo = escalar(base, 1, 1)
+        // medidas de la manga según el patrón del modelo
         const za = geo.attributes.aZona.array as Float32Array
         const ca = geo.attributes.aCm.array as Float32Array
         let largoManga = 0, minX = Infinity, maxX = -Infinity
@@ -135,18 +133,40 @@ export function cargarModeloBlender(prenda: Prenda, talla: Talla): Promise<Model
           minX = Math.min(minX, ca[i * 2])
           maxX = Math.max(maxX, ca[i * 2])
         }
+        return { geo, largoManga, contornoManga: maxX > minX ? maxX - minX : 0 }
+      }),
+    )
+  }
+  return procesadas.get(archivo)!
+}
+
+const escalados = new Map<string, Promise<ModeloCamisa>>()
+
+/** Modelo de Blender para una talla: la misma geometría del corte, con su escala (se guarda en caché). */
+export function cargarModeloBlender(prenda: Prenda, talla: Talla): Promise<ModeloCamisa> {
+  const clave = `${prenda.id}|${talla.talla}`
+  if (!escalados.has(clave)) {
+    const b = BASE[prenda.id] ?? BASE.unisex
+    escalados.set(
+      clave,
+      geometriaProcesada(b.archivo).then(({ geo, largoManga, contornoManga }) => {
+        const { ancho: W, largo: L } = medidasCm(talla)
+        const sx = W / (b.ancho * PULGADA)
+        const sy = L / (b.largo * PULGADA)
+        const P = parametros(prenda, talla)
         return {
           cuerpo: geo,
           mangas: null,
           cuello: null,
+          escala: [sx, sy] as [number, number],
           arriba: L / 2,
           abajo: -L / 2,
           ancho: W,
           largo: L,
-          largoManga: prenda.manga === 'sin' ? 0 : largoManga || P.largoManga,
-          contornoManga: maxX > minX ? maxX - minX : 2 * P.sisa,
+          largoManga: prenda.manga === 'sin' ? 0 : largoManga * sx || P.largoManga,
+          contornoManga: contornoManga ? contornoManga * sx : 2 * P.sisa,
           profCuelloEspalda: P.profEspalda,
-          punto: buscador(geo),
+          punto: buscador(geo, sx, sy),
         }
       }),
     )
