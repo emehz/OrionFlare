@@ -40,7 +40,7 @@ function urlEtiqueta(talla: string, clara: boolean) {
 
 // Textura de vista previa por lienzo (máx. 1024 px): la imagen original completa solo se usa al exportar.
 const texturas = new WeakMap<HTMLCanvasElement, THREE.CanvasTexture>()
-function texturaDe(c: HTMLCanvasElement) {
+export function texturaDe(c: HTMLCanvasElement) {
   let t = texturas.get(c)
   if (!t) {
     const escala = Math.min(1, 1024 / Math.max(c.width, c.height))

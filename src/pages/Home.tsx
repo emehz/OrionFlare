@@ -6,10 +6,10 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import { Escena } from '../three/Escena'
-import { Camisa3D, type DisenoEnPrenda } from '../three/Camisa3D'
+import { Camisa3D, texturaDe, type DisenoEnPrenda } from '../three/Camisa3D'
 import { COLORES, PRENDAS, areaMaxima, medidasCm, type Prenda, type Talla } from '../data/prendas'
 import { MUESTRAS, muestraAlAzar, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
-import { useMuestra, useLogo, conFondo } from '../lib/useMuestra'
+import { useMuestra, useLogo, conFondo, lienzoMuestra, lienzoLogo } from '../lib/useMuestra'
 import { modeloCamisa, type Zona } from '../lib/prenda3d'
 import { Tallas } from '../components/Tallas'
 import { Precios } from '../components/Precios'
@@ -69,7 +69,48 @@ function Controlador({ objetivo }: { objetivo: React.RefObject<Objetivo> }) {
     camera.position.z += (o.dist - camera.position.z) * k
     camera.lookAt(0, 0, 0)
   })
-  return <group ref={grupo}><CamisaPortada /></group>
+  return (
+    <>
+      <group ref={grupo}><CamisaPortada /></group>
+      <Precalentar />
+    </>
+  )
+}
+
+/**
+ * Prepara en segundo plano todo lo que el scroll va a necesitar (los diseños en tinta clara y oscura,
+ * la versión "con fondo" y el logo de la manga) y lo sube a la tarjeta gráfica antes de que se vea.
+ * Sin esto, el primer cambio de camisa dibujaba y subía imágenes grandes en ese momento y se congelaba.
+ */
+function Precalentar() {
+  const { gl } = useThree()
+  useEffect(() => {
+    let vivo = true
+    const subir = (c: HTMLCanvasElement) => gl.initTexture(texturaDe(c))
+    const ocioso = () => new Promise<void>((r) => ('requestIdleCallback' in window ? requestIdleCallback(() => r()) : setTimeout(r, 120)))
+    ;(async () => {
+      const ids = [leerEstado.muestra, leerEstado.muestraEspalda]
+      for (const tinta of [TINTA_CLARA, TINTA_OSCURA]) {
+        for (const id of ids) {
+          await ocioso()
+          if (!vivo) return
+          const c = await lienzoMuestra(id, tinta)
+          subir(c)
+          if (id === leerEstado.muestra) {
+            await ocioso()
+            subir(conFondo(c))
+          }
+        }
+        await ocioso()
+        if (!vivo) return
+        subir(await lienzoLogo(tinta))
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [gl])
+  return null
 }
 
 // Estado compartido de la portada (lo cambia el scroll; lo lee la camisa)

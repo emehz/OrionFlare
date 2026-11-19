@@ -31,11 +31,9 @@ export function useMuestra(id: string | null, tinta: string) {
 
 const logos = new Map<string, Promise<HTMLCanvasElement>>()
 /** Logo de Orion Flare como lienzo (para la manga de la portada). */
-export function useLogo(tinta: string) {
-  const [lienzo, setLienzo] = useState<HTMLCanvasElement | null>(null)
-  useEffect(() => {
-    const archivo = tinta === '#0b0b0c' ? 'negro' : 'blanco'
-    if (!logos.has(archivo)) {
+export function lienzoLogo(tinta: string) {
+  const archivo = tinta === '#0b0b0c' ? 'negro' : 'blanco'
+  if (!logos.has(archivo)) {
       logos.set(
         archivo,
         new Promise((res, rej) => {
@@ -51,9 +49,15 @@ export function useLogo(tinta: string) {
           img.src = urlPublica(`brand/logo-${archivo}.png`)
         }),
       )
-    }
+  }
+  return logos.get(archivo)!
+}
+
+export function useLogo(tinta: string) {
+  const [lienzo, setLienzo] = useState<HTMLCanvasElement | null>(null)
+  useEffect(() => {
     let vivo = true
-    logos.get(archivo)!.then((c) => vivo && setLienzo(c))
+    lienzoLogo(tinta).then((c) => vivo && setLienzo(c))
     return () => {
       vivo = false
     }
@@ -62,8 +66,12 @@ export function useLogo(tinta: string) {
 }
 
 /** Versión "subida por el cliente": el mismo diseño sobre un fondo blanco, para demostrar el quitado de fondo. */
+const conFondoCache = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>()
 export function conFondo(c: HTMLCanvasElement) {
+  const guardado = conFondoCache.get(c)
+  if (guardado) return guardado
   const out = document.createElement('canvas')
+  conFondoCache.set(c, out)
   const m = Math.round(c.width * 0.08)
   out.width = c.width + m * 2
   out.height = c.height + m * 2
