@@ -10,17 +10,11 @@
   height: 100svh;
   background:
     radial-gradient(ellipse 55% 45% at 50% 48%, rgb(255 255 255 / 0.07), transparent 72%),
+    radial-gradient(circle, rgb(242 240 234 / 0.05) 1px, transparent 1.5px) 0 0 / 6px 6px,
     var(--tinta);
   touch-action: none;
 }
-.crear__visor::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(circle, rgb(242 240 234 / 0.06) 1px, transparent 1.5px);
-  background-size: 6px 6px;
-  pointer-events: none;
-}
+
 .visor__info {
   position: absolute;
   left: var(--margen);
@@ -639,9 +633,7 @@ input[type='range']::-moz-range-thumb {
   bottom: 0;
   margin: 0 calc(-1 * clamp(18px, 3vw, 40px));
   padding: 16px clamp(18px, 3vw, 40px) 20px;
-  background: rgb(20 20 22 / 0.94);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--tinta-2);
   border-top: 1px solid var(--linea);
   display: grid;
   gap: 10px;

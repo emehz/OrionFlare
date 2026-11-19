@@ -74,8 +74,35 @@ function Controlador({ objetivo }: { objetivo: React.RefObject<Objetivo> }) {
     <>
       <group ref={grupo}><CamisaPortada /></group>
       <Precalentar />
+      <PausarAlOcultar />
     </>
   )
+}
+
+/** Deja de dibujar el 3D cuando las secciones de abajo (tallas, precios…) lo tapan por completo. */
+function PausarAlOcultar() {
+  const setFrameloop = useThree((s) => s.setFrameloop)
+  useEffect(() => {
+    const solido = document.querySelector('.portada__solido')
+    if (!solido) return
+    let actual: 'always' | 'never' = 'always'
+    const revisar = () => {
+      const tapado = solido.getBoundingClientRect().top <= 0
+      const nuevo = tapado ? 'never' : 'always'
+      if (nuevo !== actual) {
+        actual = nuevo
+        setFrameloop(nuevo)
+      }
+    }
+    const alScroll = () => revisar() // medir una posición es barato; no hace falta esperar al siguiente cuadro
+    window.addEventListener('scroll', alScroll, { passive: true })
+    revisar()
+    return () => {
+      window.removeEventListener('scroll', alScroll)
+      setFrameloop('always')
+    }
+  }, [setFrameloop])
+  return null
 }
 
 /**
@@ -181,7 +208,6 @@ export default function Home() {
   const objetivo = useRef<Objetivo>(objetivoDe('inicio', 0))
   const raiz = useRef<HTMLDivElement>(null)
   const [muestra, setMuestra] = useState(() => muestraAlAzar().id)
-  const [capitulo, setCapitulo] = useState<Capitulo>('inicio')
 
   // estado inicial de la camisa antes de montar el canvas
   if (!leerEstado) {
@@ -235,7 +261,8 @@ export default function Home() {
           end: 'bottom 45%',
           onToggle: (st) => {
             if (!st.isActive) return
-            setCapitulo(cap)
+            // sin estado de React: re-renderizar toda la portada aquí causaba un tirón al cambiar de camisa
+            if (raiz.current) raiz.current.dataset.capitulo = cap
             objetivo.current = objetivoDe(cap, st.progress)
             const base: Partial<EstadoPortada> = { reglas: cap === 'medidas', sucio: false }
             if (cap === 'inicio') Object.assign(base, { prenda: UNISEX, talla: tallaDe(UNISEX, 'L'), colorId: 'negro' })
@@ -273,9 +300,9 @@ export default function Home() {
         gsap.utils.toArray<HTMLElement>('.cap__panel').forEach((el) => {
           gsap.fromTo(
             el,
-            { autoAlpha: 0.001, y: 40, filter: 'blur(6px)' },
+            { autoAlpha: 0.001, y: 40 },
             {
-              autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.9, ease: 'expo.out',
+              autoAlpha: 1, y: 0, duration: 0.9, ease: 'expo.out',
               scrollTrigger: { trigger: el, start: 'top 82%', toggleActions: 'play none none reverse' },
             },
           )
@@ -295,7 +322,7 @@ export default function Home() {
   const tallaMedidas = medidasCm(tallaDe(OVERSIZE, '2XL'))
 
   return (
-    <div ref={raiz} className="portada" data-capitulo={capitulo}>
+    <div ref={raiz} className="portada" data-capitulo="inicio">
       <div className="portada__lienzo" aria-hidden="true">
         <Escena camara={[0, 0, 150]} sombraY={-46}>
           <Controlador objetivo={objetivo} />
