@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import * as THREE from 'three'
-import { useFrame, useThree } from '@react-three/fiber'
+import { invalidate, useFrame, useThree } from '@react-three/fiber'
 import { PresentationControls } from '@react-three/drei'
 import { Escena } from '../three/Escena'
 import { Camisa3D, type DisenoEnPrenda } from '../three/Camisa3D'
@@ -11,7 +11,7 @@ import { calcularPrecio, formatoUSD, NOTA_ENVIO } from '../data/precios'
 import { NEGOCIO, enlaceWhatsApp } from '../data/negocio'
 import { MUESTRAS, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
 import { lienzoMuestra } from '../lib/useMuestra'
-import type { Zona } from '../lib/prenda3d'
+import { modeloCamisa, type Zona } from '../lib/prenda3d'
 import { useModeloCamisa } from '../lib/prendaBlender'
 import {
   aBlob, calidadDPI, cargarArchivo, dpiEfectivo, exportarImpresion, mejorarCalidad,
@@ -68,8 +68,13 @@ function Visor({ zona, children }: { zona: Zona; children: ReactNode }) {
     d = Math.atan2(Math.sin(d), Math.cos(d))
     g.rotation.y += d * k
     g.position.x += (v.x - g.position.x) * k
-    camera.position.z += (v.distancia * lejos - camera.position.z) * k
+    const dZ = v.distancia * lejos - camera.position.z
+    camera.position.z += dZ * k
+    // pide cuadros solo mientras la camisa sigue llegando a su vista
+    if (Math.abs(d) > 1e-3 || Math.abs(v.x - g.position.x) > 1e-2 || Math.abs(dZ) > 1e-2) invalidate()
   })
+  // al cambiar de zona o de tamaño de pantalla, arranca el movimiento
+  useEffect(() => invalidate(), [zona, size.width, size.height])
   return <group ref={grupo}>{children}</group>
 }
 
@@ -110,7 +115,9 @@ export default function Crear() {
   const entrada = useRef<HTMLInputElement>(null)
 
   const medidas = medidasCm(talla)
-  const modelo = useModeloCamisa(prenda, talla)
+  // para los límites de las mangas: el modelo real si ya cargó; si no, las medidas calculadas
+  const modeloReal = useModeloCamisa(prenda, talla)
+  const modelo = modeloReal ?? modeloCamisa(prenda, talla)
   const conMangas = prenda.manga !== 'sin'
   const zonas: Zona[] = conMangas ? ['frente', 'espalda', 'mangaIzq', 'mangaDer'] : ['frente', 'espalda']
 

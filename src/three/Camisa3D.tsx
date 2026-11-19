@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { useFrame } from '@react-three/fiber'
+import { invalidate, useFrame } from '@react-three/fiber'
+import { useCalidad } from './Escena'
 import { Html } from '@react-three/drei'
-import { INDICE_ZONA, type Zona } from '../lib/prenda3d'
+import { INDICE_ZONA, type ModeloCamisa, type Zona } from '../lib/prenda3d'
 import { useModeloCamisa } from '../lib/prendaBlender'
 import { crearMaterialTela, MAX_DISENOS } from './materialTela'
 import type { ColorPrenda, Prenda, Talla } from '../data/prendas'
@@ -77,8 +78,14 @@ function texturaEtiqueta(url: string) {
 
 const reducido = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas = false }: Camisa3DProps) {
-  const modelo = useModeloCamisa(prenda, talla)
+/** No dibuja nada hasta que el modelo real de la camisa terminó de cargar. */
+export function Camisa3D(props: Camisa3DProps) {
+  const modelo = useModeloCamisa(props.prenda, props.talla)
+  if (!modelo) return null
+  return <CamisaConModelo {...props} modelo={modelo} />
+}
+
+function CamisaConModelo({ talla, color, disenos, activo = null, medidas = false, modelo }: Camisa3DProps & { modelo: ModeloCamisa }) {
   const [{ material, uniforms }] = useState(() => crearMaterialTela())
   const grupo = useRef<THREE.Group>(null)
 
@@ -88,7 +95,18 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
     // brillo de pelusa del algodón: en telas oscuras es sutil para que el negro siga siendo negro
     uniforms.uBrillo.value.copy(new THREE.Color(color.hex).lerp(new THREE.Color('#ffffff'), color.claro ? 0.25 : 0.4))
     uniforms.uBrilloFuerza.value = color.claro ? 0.35 : 0.5
+    invalidate()
   }, [color, material, uniforms])
+
+  // Modo liviano: sin relieve de tejido (ahorra trabajo por píxel en equipos lentos)
+  const { liviano } = useCalidad()
+  useLayoutEffect(() => {
+    if (liviano && material.normalMap) {
+      material.normalMap = null
+      material.needsUpdate = true
+      invalidate()
+    }
+  }, [liviano, material])
 
   // Diseños: solo se actualizan números y referencias a texturas
   useLayoutEffect(() => {
@@ -101,6 +119,7 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
     uniforms.uDisN.value = lista.length
     uniforms.uActivo.value = activo ? lista.findIndex((d) => d.id === activo) : -1
     uniforms.uGuia.value = activo ? 1 : 0
+    invalidate()
   }, [disenos, activo, uniforms])
 
   const [sx, sy] = modelo.escala ?? [1, 1]
@@ -110,12 +129,16 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
     uniforms.uLargoManga.value = modelo.largoManga
     const ancho = Math.min(8, modelo.ancho * 0.15)
     uniforms.uEtiquetaRect.value.set(-ancho / 2, modelo.profCuelloEspalda + 1, ancho, ancho * 0.54)
+    invalidate()
   }, [modelo, uniforms, sx, sy])
 
   useEffect(() => {
     let vivo = true
     texturaEtiqueta(urlEtiqueta(talla.talla, color.claro)).then((t) => {
-      if (vivo) uniforms.uEtiqueta.value = t
+      if (vivo) {
+        uniforms.uEtiqueta.value = t
+        invalidate()
+      }
     })
     return () => {
       vivo = false
@@ -159,6 +182,8 @@ export function Camisa3D({ prenda, talla, color, disenos, activo = null, medidas
     f.sx += f.vsx * dt
     uniforms.uLag.value = f.lag
     uniforms.uSway.value.set(f.sx, 0)
+    // mientras la tela se sigue balanceando, pide otro cuadro; cuando se asienta, deja de dibujar
+    if (Math.abs(f.lag) + Math.abs(f.vLag) + Math.abs(f.sx) + Math.abs(f.vsx) + Math.abs(omega) + Math.abs(vx) > 1e-3) invalidate()
   })
 
   const sel = medidas && activo ? disenos.find((d) => d.id === activo) : undefined

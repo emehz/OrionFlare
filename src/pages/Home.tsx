@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useFrame, useThree } from '@react-three/fiber'
+import { invalidate, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
-import { Escena } from '../three/Escena'
+import { Escena, useCalidad } from '../three/Escena'
 import { Camisa3D, texturaDe, type DisenoEnPrenda } from '../three/Camisa3D'
 import { COLORES, PRENDAS, areaMaxima, medidasCm, type Prenda, type Talla } from '../data/prendas'
 import { MUESTRAS, muestraAlAzar, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
@@ -56,19 +56,27 @@ function objetivoDe(cap: Capitulo, progreso: number): Objetivo {
 function Controlador({ objetivo }: { objetivo: React.RefObject<Objetivo> }) {
   const grupo = useRef<THREE.Group>(null)
   const { camera } = useThree()
+  const { liviano } = useCalidad()
   const extra = useRef(0)
-  useFrame((_, dt) => {
+  useFrame((_, dtReal) => {
     const o = objetivo.current
     const g = grupo.current
     if (!g) return
+    const dt = Math.min(dtReal, 0.05)
     const k = reducido() ? 1 : 1 - Math.pow(0.0025, dt) // amortiguado independiente de los FPS
-    if (o.giro && !reducido()) extra.current += dt * 0.35
+    // el giro suave de la portada se apaga en modo liviano (así la camisa queda quieta y no se redibuja)
+    const gira = o.giro && !reducido() && !liviano
+    if (gira) extra.current += dt * 0.35
     else extra.current += (Math.round(extra.current / (Math.PI * 2)) * Math.PI * 2 - extra.current) * k
-    g.rotation.y += (o.rot + extra.current - g.rotation.y) * k
+    const dRot = o.rot + extra.current - g.rotation.y
+    g.rotation.y += dRot * k
     g.position.x += (o.x - g.position.x) * k
     g.position.y += (o.y - g.position.y) * k
-    camera.position.z += (o.dist - camera.position.z) * k
+    const dZ = o.dist - camera.position.z
+    camera.position.z += dZ * k
     camera.lookAt(0, 0, 0)
+    // sigue pidiendo cuadros solo mientras algo se mueve
+    if (gira || Math.abs(dRot) > 1e-3 || Math.abs(o.x - g.position.x) > 1e-2 || Math.abs(o.y - g.position.y) > 1e-2 || Math.abs(dZ) > 1e-2) invalidate()
   })
   return (
     <>
@@ -85,13 +93,14 @@ function PausarAlOcultar() {
   useEffect(() => {
     const solido = document.querySelector('.portada__solido')
     if (!solido) return
-    let actual: 'always' | 'never' = 'always'
+    let actual: 'demand' | 'never' = 'demand'
     const revisar = () => {
       const tapado = solido.getBoundingClientRect().top <= 0
-      const nuevo = tapado ? 'never' : 'always'
+      const nuevo = tapado ? 'never' : 'demand'
       if (nuevo !== actual) {
         actual = nuevo
         setFrameloop(nuevo)
+        if (nuevo === 'demand') invalidate()
       }
     }
     const alScroll = () => revisar() // medir una posición es barato; no hace falta esperar al siguiente cuadro
@@ -99,7 +108,7 @@ function PausarAlOcultar() {
     revisar()
     return () => {
       window.removeEventListener('scroll', alScroll)
-      setFrameloop('always')
+      setFrameloop('demand')
     }
   }, [setFrameloop])
   return null
@@ -193,9 +202,9 @@ function CamisaPortada() {
       [
         disenoPara('frente', frenteFinal, e.prenda, e.talla, 'frente'),
         disenoPara('espalda', espalda, e.prenda, e.talla, 'espalda'),
-        e.prenda.manga !== 'sin' ? disenoPara('manga', logo, e.prenda, e.talla, 'mangaIzq', modelo.largoManga) : null,
+        e.prenda.manga !== 'sin' ? disenoPara('manga', logo, e.prenda, e.talla, 'mangaIzq', modelo?.largoManga ?? 20) : null,
       ].filter((d): d is DisenoEnPrenda => d !== null),
-    [frenteFinal, espalda, logo, e.prenda, e.talla, modelo.largoManga],
+    [frenteFinal, espalda, logo, e.prenda, e.talla, modelo?.largoManga],
   )
   return <Camisa3D prenda={e.prenda} talla={e.talla} color={color} disenos={disenos} activo={e.reglas ? 'frente' : null} medidas={e.reglas} />
 }
@@ -268,6 +277,7 @@ export default function Home() {
             // sin estado de React: re-renderizar toda la portada aquí causaba un tirón al cambiar de camisa
             if (raiz.current) raiz.current.dataset.capitulo = cap
             objetivo.current = objetivoDe(cap, st.progress)
+            invalidate()
             const base: Partial<EstadoPortada> = { reglas: cap === 'medidas', sucio: false }
             if (cap === 'inicio') Object.assign(base, { prenda: UNISEX, talla: tallaDe(UNISEX, 'L'), colorId: 'negro' })
             if (cap === 'diseno') Object.assign(base, { prenda: UNISEX, talla: tallaDe(UNISEX, 'L'), colorId: 'arena', sucio: st.progress < 0.5 })
@@ -279,6 +289,7 @@ export default function Home() {
           onUpdate: (st) => {
             if (!st.isActive || capActual !== cap) return
             objetivo.current = objetivoDe(cap, st.progress)
+            invalidate()
             if (cap === 'prenda') {
               const colores = ['negro', 'marino', 'blanco', 'vino']
               const colorId = colores[Math.min(colores.length - 1, Math.floor(st.progress * colores.length))]

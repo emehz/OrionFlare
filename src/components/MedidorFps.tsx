@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { infoGpu } from '../lib/gpu'
 
 /*
  * Medidor de cuadros por segundo para revisar el rendimiento en cualquier navegador.
@@ -19,25 +20,14 @@ function activo() {
   }
 }
 
-/** Nombre de la tarjeta gráfica que usa el navegador (para saber si usa la integrada o la dedicada). */
-function nombreGpu() {
-  try {
-    const gl = document.createElement('canvas').getContext('webgl')
-    const ext = gl?.getExtension('WEBGL_debug_renderer_info')
-    const nombre = ext ? (gl!.getParameter(ext.UNMASKED_RENDERER_WEBGL) as string) : (gl?.getParameter(gl.RENDERER) as string)
-    gl?.getExtension('WEBGL_lose_context')?.loseContext()
-    // "ANGLE (NVIDIA, NVIDIA GeForce RTX 4050 Laptop GPU Direct3D11 …)" → "NVIDIA GeForce RTX 4050 Laptop GPU"
-    const m = /ANGLE \([^,]*,\s*([^,(]+?)(?:\s+Direct3D|\s*\(|,|\))/.exec(nombre ?? '')
-    return (m ? m[1] : nombre ?? 'desconocida').trim()
-  } catch {
-    return 'desconocida'
-  }
-}
-
 export function MedidorFps() {
   const [visible, setVisible] = useState(activo)
   const caja = useRef<HTMLButtonElement>(null)
-  const [gpu] = useState(() => (visible ? `GPU: ${nombreGpu()}` : ''))
+  const [gpu] = useState(() => {
+    if (!visible) return ''
+    const g = infoGpu()
+    return `GPU: ${g.nombre}${g.software ? ' (sin aceleración: dibuja el procesador)' : ''}`
+  })
   useEffect(() => {
     if (!visible) return
     let cuadros = 0
@@ -52,8 +42,9 @@ export function MedidorFps() {
       if (t - desde >= 1000) {
         const fps = Math.round((cuadros * 1000) / (t - desde))
         if (caja.current) {
-          const dpr = (window as unknown as { __orionDpr?: number }).__orionDpr
-          caja.current.firstChild!.textContent = `${fps} FPS · peor cuadro ${Math.round(peor)} ms${dpr ? ` · ${dpr}×` : ''}`
+          const w = window as unknown as { __orionDpr?: number; __orionLiviano?: boolean }
+          const dpr = w.__orionDpr
+          caja.current.firstChild!.textContent = `${fps} FPS · peor cuadro ${Math.round(peor)} ms${dpr ? ` · ${dpr}×` : ''}${w.__orionLiviano ? ' · liviano' : ''}`
           caja.current.dataset.nivel = fps >= 50 ? 'bien' : fps >= 30 ? 'medio' : 'mal'
         }
         cuadros = 0

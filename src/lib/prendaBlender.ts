@@ -174,9 +174,13 @@ export function cargarModeloBlender(prenda: Prenda, talla: Talla): Promise<Model
   return escalados.get(clave)!
 }
 
-/** Devuelve el modelo de Blender cuando está listo; mientras tanto, el generado en código. */
+/**
+ * Devuelve el modelo real de la camisa cuando está listo (null mientras carga la primera vez).
+ * Al cambiar de corte o talla se mantiene el anterior hasta que el nuevo esté listo.
+ * Solo si el archivo no carga se usa el modelo generado en código.
+ */
 export function useModeloCamisa(prenda: Prenda, talla: Talla) {
-  const [modelo, setModelo] = useState<ModeloCamisa>(() => modeloCamisa(prenda, talla))
+  const [modelo, setModelo] = useState<ModeloCamisa | null>(null)
   useEffect(() => {
     let vivo = true
     cargarModeloBlender(prenda, talla)
