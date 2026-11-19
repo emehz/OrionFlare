@@ -34,7 +34,8 @@ export interface Pedido {
   codigo: string
   cliente: { nombre: string; whatsapp: string; departamento: string; municipio: string; direccion: string; notas: string }
   prenda: { tipo: string; color: string; talla: string; cantidad: number }
-  lados: { lado: 'frente' | 'espalda'; anchoCm: number; altoCm: number; xCm: number; yCm: number; dpi: number; archivo: string }[]
+  /** un elemento por diseño; `lado` es la zona: frente, espalda, mangaIzq o mangaDer */
+  lados: { lado: 'frente' | 'espalda' | 'mangaIzq' | 'mangaDer'; anchoCm: number; altoCm: number; xCm: number; yCm: number; dpi: number; archivo: string }[]
   total: number
   aceptoTerminos: boolean
   declaroDerechos: boolean

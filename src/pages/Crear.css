@@ -159,11 +159,136 @@
   border: 2px solid var(--bermellon);
 }
 
-.lados {
+.zonas {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 6px;
 }
+.zona {
+  font: inherit;
+  font-family: var(--display);
+  font-size: 0.95rem;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--papel);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 160ms var(--ease-out);
+}
+.zona:active {
+  transform: scale(0.97);
+}
+.zona span {
+  font-family: var(--texto);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--gris);
+}
+.zona[aria-pressed='true'] {
+  border-color: var(--bermellon);
+  background: rgb(229 56 30 / 0.08);
+}
+
+.capas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.capas li {
+  display: flex;
+  gap: 6px;
+}
+.capa {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--papel);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.capa[aria-pressed='true'] {
+  border-color: var(--papel);
+  background: var(--tinta-3);
+}
+@media (hover: hover) and (pointer: fine) {
+  .capa:hover {
+    border-color: var(--gris);
+  }
+}
+.capa--agregar {
+  border-style: dashed;
+}
+.capa__texto {
+  display: grid;
+  min-width: 0;
+}
+.capa__texto strong {
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.capa__texto span {
+  font-size: 0.8rem;
+  color: var(--gris);
+  font-variant-numeric: tabular-nums;
+}
+.capa__quitar {
+  flex: none;
+  width: 44px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--gris);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.capa__quitar:hover {
+  color: #ff8a73;
+  border-color: #ff8a73;
+}
+.capa__quitar svg {
+  width: 18px;
+  height: 18px;
+}
+.miniatura {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  background-color: #6d6d6d;
+  border-radius: var(--radio);
+}
+.miniatura canvas {
+  max-width: 46px;
+  max-height: 46px;
+  width: auto;
+  height: auto;
+}
+.miniatura--mas {
+  background: transparent;
+  border: 1px dashed var(--linea);
+  font-family: var(--display);
+  font-size: 1.4rem;
+  color: var(--bermellon);
+}
+
 .lado {
   font: inherit;
   font-family: var(--display);
@@ -634,7 +759,11 @@ input[type='range']::-moz-range-thumb {
     grid-template-columns: 1fr;
   }
   .crear__visor {
-    height: 40svh;
+    height: 46svh;
+    padding-top: 58px; /* la camisa empieza debajo de la cabecera */
+  }
+  .visor__info {
+    display: none;
   }
   .resumen {
     gap: 8px;

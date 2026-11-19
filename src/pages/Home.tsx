@@ -6,11 +6,11 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import { Escena } from '../three/Escena'
-import { Camisa3D } from '../three/Camisa3D'
+import { Camisa3D, type DisenoEnPrenda } from '../three/Camisa3D'
 import { COLORES, PRENDAS, areaMaxima, medidasCm, type Prenda, type Talla } from '../data/prendas'
 import { MUESTRAS, muestraAlAzar, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
-import { useMuestra, conFondo } from '../lib/useMuestra'
-import type { Estampa } from '../lib/texturas'
+import { useMuestra, useLogo, conFondo } from '../lib/useMuestra'
+import { modeloCamisa, type Zona } from '../lib/prenda3d'
 import { Tallas } from '../components/Tallas'
 import { Precios } from '../components/Precios'
 import { Preguntas } from '../components/Preguntas'
@@ -35,11 +35,14 @@ function objetivoDe(cap: Capitulo, progreso: number): Objetivo {
   const m = movil()
   const lado = m ? 0 : 24
   switch (cap) {
-    case 'inicio':
-      return { rot: 0, dist: m ? 340 : 200, x: m ? 0 : 4, y: m ? 30 : 7, giro: true }
+    case 'inicio': {
+      // ?vista=<radianes> fija el ángulo (útil para revisar la camisa desde un lado concreto)
+      const vista = new URLSearchParams(location.search).get('vista')
+      return { rot: vista ? Number(vista) : 0, dist: m ? 340 : 200, x: m ? 0 : 4, y: m ? 30 : 7, giro: !vista }
+    }
     case 'prenda':
-      // vaivén de tres cuartos: la camisa es plana de perfil, así que nunca se muestra de canto
-      return { rot: Math.sin(progreso * Math.PI * 2) * 0.75, dist: m ? 340 : 200, x: lado, y: m ? 34 : 2, giro: false }
+      // una vuelta completa: la camisa es un modelo 3D cerrado, se ve bien desde cualquier lado
+      return { rot: progreso * Math.PI * 2, dist: m ? 340 : 200, x: lado, y: m ? 34 : 2, giro: false }
     case 'diseno':
       return { rot: -0.3 + progreso * 0.6, dist: m ? 300 : 175, x: lado, y: m ? 30 : 2, giro: false }
     case 'medidas':
@@ -82,16 +85,20 @@ interface EstadoPortada {
 let fijarEstado: (p: Partial<EstadoPortada>) => void = () => {}
 let leerEstado: EstadoPortada
 
-function estampaPara(lienzo: HTMLCanvasElement | null, prenda: Prenda, talla: Talla, espalda: boolean): Estampa | null {
+function disenoPara(id: string, lienzo: HTMLCanvasElement | null, prenda: Prenda, talla: Talla, zona: Zona): DisenoEnPrenda | null {
   if (!lienzo) return null
+  if (zona === 'mangaIzq' || zona === 'mangaDer') {
+    const ancho = 7
+    return { id, zona, imagen: lienzo, anchoCm: ancho, altoCm: (ancho * lienzo.height) / lienzo.width, x: 0, y: 4 }
+  }
   const max = areaMaxima(prenda, talla)
-  let ancho = Math.min(max.ancho * 0.82, 30)
+  let ancho = Math.min(max.ancho * 0.8, 28)
   let alto = (ancho * lienzo.height) / lienzo.width
-  if (alto > max.alto * 0.85) {
-    alto = max.alto * 0.85
+  if (alto > max.alto * 0.8) {
+    alto = max.alto * 0.8
     ancho = (alto * lienzo.width) / lienzo.height
   }
-  return { imagen: lienzo, anchoCm: ancho, altoCm: alto, x: 0, y: espalda ? 8 : 9.5 }
+  return { id, zona, imagen: lienzo, anchoCm: ancho, altoCm: alto, x: 0, y: zona === 'espalda' ? 8 : 10 }
 }
 
 function CamisaPortada() {
@@ -107,17 +114,18 @@ function CamisaPortada() {
   const tinta = color.claro ? TINTA_OSCURA : TINTA_CLARA
   const frente = useMuestra(e.muestra, tinta)
   const espalda = useMuestra(e.muestraEspalda, tinta)
+  const logo = useLogo(tinta)
   const frenteFinal = useMemo(() => (e.sucio && frente ? conFondo(frente) : frente), [e.sucio, frente])
-  return (
-    <Camisa3D
-      prenda={e.prenda}
-      talla={e.talla}
-      color={color}
-      frente={estampaPara(frenteFinal, e.prenda, e.talla, false)}
-      espalda={estampaPara(espalda, e.prenda, e.talla, true)}
-      reglas={e.reglas}
-    />
+  const disenos = useMemo(
+    () =>
+      [
+        disenoPara('frente', frenteFinal, e.prenda, e.talla, 'frente'),
+        disenoPara('espalda', espalda, e.prenda, e.talla, 'espalda'),
+        e.prenda.manga !== 'sin' ? disenoPara('manga', logo, e.prenda, e.talla, 'mangaIzq') : null,
+      ].filter((d): d is DisenoEnPrenda => d !== null),
+    [frenteFinal, espalda, logo, e.prenda, e.talla],
   )
+  return <Camisa3D prenda={e.prenda} talla={e.talla} color={color} disenos={disenos} activo={e.reglas ? 'frente' : null} medidas={e.reglas} />
 }
 
 const UNISEX = PRENDAS[0]
@@ -147,6 +155,19 @@ export default function Home() {
     leerEstado = { ...leerEstado, muestra }
     fijarEstado({ muestra })
   }, [muestra])
+
+  // Prepara de antemano las camisas que aparecen al hacer scroll, para que el cambio no dé tirones
+  useEffect(() => {
+    const pendientes: [Prenda, string][] = [[OVERSIZE, 'XL'], [OVERSIZE, '2XL'], [UNISEX, 'M']]
+    const ocioso = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn) : setTimeout(fn, 200))
+    const siguiente = () => {
+      const p = pendientes.shift()
+      if (!p) return
+      modeloCamisa(p[0], tallaDe(p[0], p[1]))
+      ocioso(siguiente)
+    }
+    ocioso(siguiente)
+  }, [])
 
   useEffect(() => {
     const lenis = reducido() ? null : new Lenis({ lerp: 0.12 })

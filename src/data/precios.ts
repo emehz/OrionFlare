@@ -31,7 +31,7 @@ export const DTF = {
 }
 const COSTO_CM2 = DTF.costoMetro / (DTF.anchoRollo * 100)
 
-const PRENSADO_POR_LADO = 0.75 // energía, tiempo y papel de la plancha por cada lado estampado
+const PRENSADO_POR_LADO = 0.75 // energía, tiempo y papel de la plancha por cada zona estampada (frente, espalda, manga)
 const MARGEN = 1.6 // precio = costo × 1.6 (60 % sobre costo)
 const REDONDEO = 0.5 // redondear hacia arriba a $0.50
 
@@ -63,10 +63,14 @@ export function costoDTF(lado: LadoEstampado) {
   return lado.anchoCm * lado.altoCm * COSTO_CM2 * DTF.desperdicio
 }
 
-export function calcularPrecio(prenda: Prenda, talla: Talla, lados: LadoEstampado[], cantidad = 1) {
+/**
+ * @param piezas cada diseño es una pieza de DTF (se cobra su área)
+ * @param zonas cuántas zonas distintas se planchan (frente, espalda, cada manga)
+ */
+export function calcularPrecio(prenda: Prenda, talla: Talla, piezas: LadoEstampado[], cantidad = 1, zonas = piezas.length) {
   const camisa = costoCamisa(prenda, talla)
-  const dtf = lados.reduce((s, l) => s + costoDTF(l), 0)
-  const prensado = lados.length * PRENSADO_POR_LADO
+  const dtf = piezas.reduce((s, l) => s + costoDTF(l), 0)
+  const prensado = zonas * PRENSADO_POR_LADO
   const costo = camisa + dtf + prensado
   const unitario = Math.ceil((costo * MARGEN) / REDONDEO) * REDONDEO
   return {

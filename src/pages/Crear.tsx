@@ -1,26 +1,27 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import * as THREE from 'three'
+import { useFrame, useThree } from '@react-three/fiber'
+import { PresentationControls } from '@react-three/drei'
 import { Escena } from '../three/Escena'
-import { Camisa3D } from '../three/Camisa3D'
+import { Camisa3D, type DisenoEnPrenda } from '../three/Camisa3D'
+import { MAX_DISENOS } from '../three/materialTela'
 import { COLORES, PRENDAS, areaMaxima, medidasCm } from '../data/prendas'
 import { calcularPrecio, formatoUSD, NOTA_ENVIO } from '../data/precios'
 import { NEGOCIO, enlaceWhatsApp } from '../data/negocio'
 import { MUESTRAS, TINTA_CLARA, TINTA_OSCURA } from '../lib/muestras'
 import { lienzoMuestra } from '../lib/useMuestra'
+import { modeloCamisa, type Zona } from '../lib/prenda3d'
 import {
   aBlob, calidadDPI, cargarArchivo, dpiEfectivo, exportarImpresion, mejorarCalidad,
   quitarFondoIA, quitarFondoLiso, recortarTransparente, tieneTransparencia,
 } from '../lib/imagen'
 import { enviarPedido, generarCodigo, supabaseActivo, type Pedido } from '../lib/pedidos'
-import type { Estampa } from '../lib/texturas'
 import './Crear.css'
 
-type Lado = 'frente' | 'espalda'
-
-interface DisenoLado {
+interface Capa {
+  id: string
+  zona: Zona
   original: HTMLCanvasElement
   actual: HTMLCanvasElement
   nombre: string
@@ -29,28 +30,46 @@ interface DisenoLado {
   y: number
 }
 
+const NOMBRE_ZONA: Record<Zona, string> = {
+  frente: 'Frente',
+  espalda: 'Espalda',
+  mangaIzq: 'Manga izquierda',
+  mangaDer: 'Manga derecha',
+}
+const CORTO_ZONA: Record<Zona, string> = { frente: 'Frente', espalda: 'Espalda', mangaIzq: 'Manga izq.', mangaDer: 'Manga der.' }
+
+// Cómo se gira la camisa para mostrar cada zona (la manga izquierda de quien la usa queda a la derecha de quien mira)
+const VISTA_ZONA: Record<Zona, { giro: number; x: number; distancia: number }> = {
+  frente: { giro: 0, x: 0, distancia: 205 },
+  espalda: { giro: Math.PI, x: 0, distancia: 205 },
+  mangaIzq: { giro: -0.95, x: -19, distancia: 135 },
+  mangaDer: { giro: 0.95, x: 19, distancia: 135 },
+}
+
 const DEPARTAMENTOS = ['Ahuachapán', 'Cabañas', 'Chalatenango', 'Cuscatlán', 'La Libertad', 'La Paz', 'La Unión', 'Morazán', 'San Miguel', 'San Salvador', 'San Vicente', 'Santa Ana', 'Sonsonate', 'Usulután']
 
-function GiroCamara({ lado, controles }: { lado: Lado; controles: React.RefObject<OrbitControlsImpl | null> }) {
-  const objetivo = lado === 'frente' ? 0 : Math.PI
-  const anim = useRef(true)
-  useEffect(() => {
-    anim.current = true
-  }, [lado])
+let contador = 0
+const nuevoId = () => `d${Date.now().toString(36)}${(contador++).toString(36)}`
+
+/** Gira y acerca la camisa a la zona que se está editando; el usuario la puede seguir girando con el dedo o el mouse. */
+function Visor({ zona, children }: { zona: Zona; children: ReactNode }) {
+  const grupo = useRef<THREE.Group>(null)
+  const { camera, size } = useThree()
   useFrame((_, dt) => {
-    const c = controles.current
-    if (!c || !anim.current) return
-    const actual = c.getAzimuthalAngle()
-    let delta = objetivo - actual
-    delta = Math.atan2(Math.sin(delta), Math.cos(delta))
-    if (Math.abs(delta) < 0.002) {
-      anim.current = false
-      return
-    }
-    c.setAzimuthalAngle(actual + delta * (1 - Math.pow(0.002, dt)))
-    c.update()
+    const g = grupo.current
+    if (!g) return
+    const v = VISTA_ZONA[zona]
+    // en pantallas angostas (celular) la cámara se aleja para que quepa la camisa completa
+    const aspecto = size.width / Math.max(1, size.height)
+    const lejos = Math.min(1.9, Math.max(1, 1.05 / aspecto))
+    const k = 1 - Math.pow(0.003, Math.min(dt, 0.05))
+    let d = v.giro - g.rotation.y
+    d = Math.atan2(Math.sin(d), Math.cos(d))
+    g.rotation.y += d * k
+    g.position.x += (v.x - g.position.x) * k
+    camera.position.z += (v.distancia * lejos - camera.position.z) * k
   })
-  return null
+  return <group ref={grupo}>{children}</group>
 }
 
 function Miniatura({ lienzo }: { lienzo: HTMLCanvasElement }) {
@@ -58,17 +77,17 @@ function Miniatura({ lienzo }: { lienzo: HTMLCanvasElement }) {
   useEffect(() => {
     const c = ref.current
     if (!c) return
-    const escala = Math.min(1, 240 / Math.max(lienzo.width, lienzo.height))
-    c.width = Math.round(lienzo.width * escala)
-    c.height = Math.round(lienzo.height * escala)
+    const escala = Math.min(1, 160 / Math.max(lienzo.width, lienzo.height))
+    c.width = Math.max(1, Math.round(lienzo.width * escala))
+    c.height = Math.max(1, Math.round(lienzo.height * escala))
     const ctx = c.getContext('2d')!
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(lienzo, 0, 0, c.width, c.height)
   }, [lienzo])
   return (
-    <div className="diseno__miniatura trama">
-      <canvas ref={ref} role="img" aria-label="Vista previa de tu diseño" />
-    </div>
+    <span className="miniatura trama">
+      <canvas ref={ref} aria-hidden="true" />
+    </span>
   )
 }
 
@@ -80,57 +99,87 @@ export default function Crear() {
   const [colorId, setColorId] = useState('negro')
   const color = COLORES.find((c) => c.id === colorId)!
   const [cantidad, setCantidad] = useState(1)
-  const [lado, setLado] = useState<Lado>('frente')
-  const [lados, setLados] = useState<Record<Lado, DisenoLado | null>>({ frente: null, espalda: null })
+  const [zona, setZona] = useState<Zona>('frente')
+  const [capas, setCapas] = useState<Capa[]>([])
+  const [activaId, setActivaId] = useState<string | null>(null)
+  const [agregando, setAgregando] = useState(false)
   const [ocupado, setOcupado] = useState<{ texto: string; fraccion?: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [arrastrando, setArrastrando] = useState(false)
-  const controles = useRef<OrbitControlsImpl>(null)
   const entrada = useRef<HTMLInputElement>(null)
 
   const medidas = medidasCm(talla)
-  const max = areaMaxima(prenda, talla)
-  const actual = lados[lado]
+  const modelo = useMemo(() => modeloCamisa(prenda, talla), [prenda, talla])
+  const conMangas = prenda.manga !== 'sin'
+  const zonas: Zona[] = conMangas ? ['frente', 'espalda', 'mangaIzq', 'mangaDer'] : ['frente', 'espalda']
 
-  // Ajusta los diseños si la talla nueva es más pequeña
+  const capasZona = capas.filter((c) => c.zona === zona)
+  const activa = capas.find((c) => c.id === activaId && c.zona === zona) ?? null
+  const mostrarSubida = agregando || capasZona.length === 0
+
+  // límites de tamaño y posición de cada zona
+  function limites(z: Zona) {
+    if (z === 'mangaIzq' || z === 'mangaDer') {
+      const ancho = Math.min(10, Math.floor(modelo.contornoManga * 0.42))
+      const alto = Math.max(4, Math.min(10, Math.floor(modelo.largoManga - 4)))
+      return { ancho, alto, largo: modelo.largoManga, mitad: modelo.contornoManga * 0.25, minAncho: 2 }
+    }
+    const max = areaMaxima(prenda, talla)
+    return { ancho: max.ancho, alto: max.alto, largo: medidas.largo, mitad: medidas.ancho / 2, minAncho: 3 }
+  }
+
+  const altoDe = (c: Capa, ancho = c.anchoCm) => (ancho * c.actual.height) / c.actual.width
+
+  function limitar(c: Capa): Capa {
+    const l = limites(c.zona)
+    let ancho = Math.min(Math.max(c.anchoCm, l.minAncho), l.ancho)
+    if (altoDe(c, ancho) > l.alto) ancho = (l.alto * c.actual.width) / c.actual.height
+    const alto = altoDe(c, ancho)
+    const limX = Math.max(0, l.mitad - ancho / 2 - 1.5)
+    const margenAbajo = c.zona.startsWith('manga') ? 2.5 : 4
+    return {
+      ...c,
+      anchoCm: Math.round(ancho * 10) / 10,
+      x: Math.min(Math.max(c.x, -limX), limX),
+      y: Math.min(Math.max(c.y, 1.5), Math.max(1.5, l.largo - alto - margenAbajo)),
+    }
+  }
+
+  // Al cambiar de prenda o talla, todos los diseños se ajustan a los nuevos límites
   useEffect(() => {
-    setLados((prev) => {
-      const sig = { ...prev }
-      ;(['frente', 'espalda'] as Lado[]).forEach((l) => {
-        const d = prev[l]
-        if (d) sig[l] = limitar(d)
-      })
-      return sig
-    })
+    setCapas((prev) => prev.filter((c) => conMangas || !c.zona.startsWith('manga')).map(limitar))
+    if (!conMangas && zona.startsWith('manga')) setZona('frente')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prendaId, tallaId])
 
-  function altoDe(d: DisenoLado, ancho = d.anchoCm) {
-    return (ancho * d.actual.height) / d.actual.width
+  // Al cambiar de zona, selecciona su primer diseño
+  useEffect(() => {
+    setAgregando(false)
+    setActivaId((id) => (capas.some((c) => c.id === id && c.zona === zona) ? id : capas.find((c) => c.zona === zona)?.id ?? null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zona])
+
+  function actualizar(cambios: Partial<Capa>) {
+    if (!activa) return
+    setCapas((prev) => prev.map((c) => (c.id === activa.id ? limitar({ ...c, ...cambios }) : c)))
   }
 
-  function limitar(d: DisenoLado): DisenoLado {
-    let ancho = Math.min(Math.max(d.anchoCm, 4), max.ancho)
-    if (altoDe(d, ancho) > max.alto) ancho = (max.alto * d.actual.width) / d.actual.height
-    const alto = altoDe(d, ancho)
-    const limX = Math.max(0, medidas.ancho / 2 - ancho / 2 - 2)
-    const x = Math.min(Math.max(d.x, -limX), limX)
-    const y = Math.min(Math.max(d.y, 3), Math.max(3, medidas.largo - alto - 4))
-    return { ...d, anchoCm: Math.round(ancho * 10) / 10, x, y }
-  }
-
-  function actualizar(cambios: Partial<DisenoLado>) {
-    setLados((prev) => {
-      const d = prev[lado]
-      if (!d) return prev
-      return { ...prev, [lado]: limitar({ ...d, ...cambios }) }
-    })
+  function posicionInicial(z: Zona) {
+    const enZona = capas.filter((c) => c.zona === z).length
+    if (z.startsWith('manga')) return { anchoCm: 7, y: 3 + enZona * 9, x: 0 }
+    return { anchoCm: enZona ? 10 : Math.min(28, limites(z).ancho * 0.8), y: (z === 'frente' ? 9 : 7) + enZona * 12, x: 0 }
   }
 
   function colocar(lienzo: HTMLCanvasElement, nombre: string) {
+    if (capas.length >= MAX_DISENOS) {
+      setError(`Puedes poner hasta ${MAX_DISENOS} diseños por camisa.`)
+      return
+    }
     const recortado = tieneTransparencia(lienzo) ? recortarTransparente(lienzo) : lienzo
-    const base: DisenoLado = { original: recortado, actual: recortado, nombre, anchoCm: Math.min(28, max.ancho * 0.8), x: 0, y: lado === 'frente' ? 9 : 7 }
-    setLados((prev) => ({ ...prev, [lado]: limitar(base) }))
+    const capa = limitar({ id: nuevoId(), zona, original: recortado, actual: recortado, nombre, ...posicionInicial(zona) })
+    setCapas((prev) => [...prev, capa])
+    setActivaId(capa.id)
+    setAgregando(false)
     setError(null)
   }
 
@@ -155,20 +204,20 @@ export default function Crear() {
     setOcupado(null)
   }
 
+  function quitar(id: string) {
+    setCapas((prev) => prev.filter((c) => c.id !== id))
+    if (activaId === id) setActivaId(capas.find((c) => c.zona === zona && c.id !== id)?.id ?? null)
+  }
+
   async function herramienta(fn: (c: HTMLCanvasElement) => Promise<HTMLCanvasElement> | HTMLCanvasElement, textoInicial: string) {
-    if (!actual) return
+    if (!activa) return
+    const id = activa.id
     setError(null)
     setOcupado({ texto: textoInicial })
-    // deja pintar el aviso antes de bloquear con cálculos pesados
-    await new Promise((r) => setTimeout(r, 30))
+    await new Promise((r) => setTimeout(r, 30)) // deja pintar el aviso antes del cálculo pesado
     try {
-      const nuevo = await fn(actual.actual)
-      setLados((prev) => {
-        const d = prev[lado]
-        if (!d) return prev
-        // conserva el ancho físico; el alto se recalcula con la nueva proporción
-        return { ...prev, [lado]: limitar({ ...d, actual: nuevo }) }
-      })
+      const nuevo = await fn(activa.actual)
+      setCapas((prev) => prev.map((c) => (c.id === id ? limitar({ ...c, actual: nuevo }) : c)))
     } catch (e) {
       console.error(e)
       setError('No se pudo completar. Si tu teléfono tiene poca memoria, prueba desde una computadora o con una imagen más pequeña.')
@@ -177,17 +226,17 @@ export default function Crear() {
     }
   }
 
-  const estampas = useMemo(() => {
-    const aEstampa = (d: DisenoLado | null): Estampa | null =>
-      d ? { imagen: d.actual, anchoCm: d.anchoCm, altoCm: altoDe(d), x: d.x, y: d.y } : null
-    return { frente: aEstampa(lados.frente), espalda: aEstampa(lados.espalda) }
-  }, [lados])
+  const disenos: DisenoEnPrenda[] = useMemo(
+    () => capas.map((c) => ({ id: c.id, zona: c.zona, imagen: c.actual, anchoCm: c.anchoCm, altoCm: altoDe(c), x: c.x, y: c.y })),
+    [capas],
+  )
 
-  const ladosConDiseno = (['frente', 'espalda'] as Lado[]).filter((l) => lados[l])
-  const precio = calcularPrecio(prenda, talla, ladosConDiseno.map((l) => ({ anchoCm: lados[l]!.anchoCm, altoCm: altoDe(lados[l]!) })), cantidad)
+  const zonasUsadas = new Set(capas.map((c) => c.zona)).size
+  const precio = calcularPrecio(prenda, talla, capas.map((c) => ({ anchoCm: c.anchoCm, altoCm: altoDe(c) })), cantidad, zonasUsadas)
 
-  const dpi = actual ? dpiEfectivo(actual.actual.width, actual.anchoCm) : 0
+  const dpi = activa ? dpiEfectivo(activa.actual.width, activa.anchoCm) : 0
   const calidad = calidadDPI(dpi)
+  const lim = limites(zona)
 
   // ───── Formulario ─────
   const [datos, setDatos] = useState({ nombre: '', whatsapp: '', departamento: '', municipio: '', direccion: '', notas: '', web: '' })
@@ -206,8 +255,9 @@ export default function Crear() {
     e.preventDefault()
     setError(null)
     if (datos.web || Date.now() - inicioForm.current < 4000) return // trampa para robots
-    if (ladosConDiseno.length === 0) return setError('Agrega un diseño al frente o a la espalda.')
+    if (capas.length === 0) return setError('Agrega al menos un diseño.')
     const tel = datos.whatsapp.replace(/\D/g, '').replace(/^503/, '')
+    if (!datos.nombre.trim() || !datos.departamento || !datos.municipio.trim() || !datos.direccion.trim()) return setError('Completa tu nombre y los datos de envío.')
     if (!/^[67]\d{7}$/.test(tel)) return setError('Escribe un número de WhatsApp salvadoreño de 8 dígitos (empieza con 6 o 7).')
     if (!terminos || !derechos) return setError('Para enviar el pedido necesitas aceptar los términos y declarar que puedes usar el diseño.')
 
@@ -216,13 +266,12 @@ export default function Crear() {
       setEnviando('Generando los archivos para impresión…')
       const archivos: { nombre: string; blob: Blob }[] = []
       const detalle: Pedido['lados'] = []
-      for (const l of ladosConDiseno) {
-        const d = lados[l]!
-        const alto = altoDe(d)
-        const imp = await exportarImpresion(d.actual, d.anchoCm, alto)
-        const nombre = `${codigo}-${l}-${d.anchoCm.toFixed(1)}x${alto.toFixed(1)}cm-${imp.dpi}dpi.png`
+      for (const [i, c] of capas.entries()) {
+        const alto = altoDe(c)
+        const imp = await exportarImpresion(c.actual, c.anchoCm, alto)
+        const nombre = `${codigo}-${i + 1}-${c.zona}-${c.anchoCm.toFixed(1)}x${alto.toFixed(1)}cm-${imp.dpi}dpi.png`
         archivos.push({ nombre, blob: imp.blob })
-        detalle.push({ lado: l, anchoCm: d.anchoCm, altoCm: Math.round(alto * 10) / 10, xCm: Math.round(d.x * 10) / 10, yCm: Math.round(d.y * 10) / 10, dpi: imp.dpi, archivo: nombre })
+        detalle.push({ lado: c.zona, anchoCm: c.anchoCm, altoCm: Math.round(alto * 10) / 10, xCm: Math.round(c.x * 10) / 10, yCm: Math.round(c.y * 10) / 10, dpi: imp.dpi, archivo: nombre })
       }
       const vista = document.querySelector<HTMLCanvasElement>('.crear__visor canvas')
       if (vista) archivos.push({ nombre: `${codigo}-vista-previa.jpg`, blob: await aBlob(vista, 'image/jpeg', 0.85) })
@@ -239,7 +288,7 @@ export default function Crear() {
       const resumen = [
         `Hola Orion Flare, acabo de hacer el pedido ${codigo}.`,
         `${cantidad} × ${prenda.nombre}, ${color.nombre}, talla ${talla.talla}.`,
-        ...detalle.map((d) => `${d.lado === 'frente' ? 'Frente' : 'Espalda'}: ${d.anchoCm} × ${d.altoCm} cm.`),
+        ...detalle.map((d) => `${NOMBRE_ZONA[d.lado]}: ${d.anchoCm} × ${d.altoCm} cm.`),
         `Total sin envío: ${formatoUSD(precio.total)}.`,
         `Envío a ${pedido.cliente.municipio}, ${pedido.cliente.departamento}.`,
       ].join('\n')
@@ -287,10 +336,12 @@ export default function Crear() {
   return (
     <div className="crear">
       <div className="crear__visor">
-        <Escena camara={[0, 6, 205]} sombraY={-medidas.largo / 2 - 6} capturable>
-          <Camisa3D prenda={prenda} talla={talla} color={color} frente={estampas.frente} espalda={estampas.espalda} reglas={lado === 'frente'} pxcm={22} />
-          <OrbitControls ref={controles} enablePan={false} minDistance={90} maxDistance={300} minPolarAngle={Math.PI * 0.3} maxPolarAngle={Math.PI * 0.62} />
-          <GiroCamara lado={lado} controles={controles} />
+        <Escena camara={[0, 4, 205]} sombraY={-medidas.largo / 2 - 6} capturable>
+          <PresentationControls global cursor polar={[-0.15, 0.25]} azimuth={[-Infinity, Infinity]} speed={1.4} damping={0.25} snap={false}>
+            <Visor zona={zona}>
+              <Camisa3D prenda={prenda} talla={talla} color={color} disenos={disenos} activo={activa?.id ?? null} medidas={!!activa} />
+            </Visor>
+          </PresentationControls>
         </Escena>
         <div className="visor__info" aria-hidden="true">
           <span>{prenda.nombre} · {talla.talla}</span>
@@ -335,17 +386,47 @@ export default function Crear() {
         </fieldset>
 
         <fieldset className="paso">
-          <legend>Diseño</legend>
-          <div className="lados" role="group" aria-label="Lado de la camisa">
-            {(['frente', 'espalda'] as Lado[]).map((l) => (
-              <button type="button" key={l} className="lado" aria-pressed={lado === l} onClick={() => setLado(l)}>
-                {l === 'frente' ? 'Frente' : 'Espalda'}
-                <span>{lados[l] ? `${lados[l]!.anchoCm} cm` : 'sin diseño'}</span>
-              </button>
-            ))}
+          <legend>Diseños <span className="paso__valor">{capas.length} de {MAX_DISENOS}</span></legend>
+          <div className="zonas" role="group" aria-label="Zona de la camisa">
+            {zonas.map((z) => {
+              const n = capas.filter((c) => c.zona === z).length
+              return (
+                <button type="button" key={z} className="zona" aria-pressed={zona === z} onClick={() => setZona(z)}>
+                  {CORTO_ZONA[z]}
+                  <span>{n ? `${n} diseño${n > 1 ? 's' : ''}` : 'vacía'}</span>
+                </button>
+              )
+            })}
           </div>
 
-          {!actual ? (
+          {capasZona.length > 0 && (
+            <ul className="capas" aria-label={`Diseños en ${NOMBRE_ZONA[zona].toLowerCase()}`}>
+              {capasZona.map((c) => (
+                <li key={c.id}>
+                  <button type="button" className="capa" aria-pressed={c.id === activa?.id} onClick={() => { setActivaId(c.id); setAgregando(false) }}>
+                    <Miniatura lienzo={c.actual} />
+                    <span className="capa__texto">
+                      <strong>{c.nombre}</strong>
+                      <span>{c.anchoCm.toFixed(1)} × {altoDe(c).toFixed(1)} cm</span>
+                    </span>
+                  </button>
+                  <button type="button" className="capa__quitar" aria-label={`Quitar ${c.nombre}`} onClick={() => quitar(c.id)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                  </button>
+                </li>
+              ))}
+              {!agregando && capas.length < MAX_DISENOS && (
+                <li>
+                  <button type="button" className="capa capa--agregar" onClick={() => { setAgregando(true); setActivaId(null) }}>
+                    <span className="miniatura miniatura--mas" aria-hidden="true">+</span>
+                    <span className="capa__texto"><strong>Agregar otro diseño</strong><span>a {NOMBRE_ZONA[zona].toLowerCase()}</span></span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          )}
+
+          {mostrarSubida && (
             <>
               <div
                 className="soltar"
@@ -355,30 +436,30 @@ export default function Crear() {
                 onDrop={(e) => { e.preventDefault(); setArrastrando(false); subir(e.dataTransfer.files[0]) }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5" /><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
-                <p><strong>Sube tu imagen</strong> para el {lado}</p>
-                <p className="soltar__ayuda">PNG, JPG o WEBP de hasta 25 MB. Mientras más grande, mejor se imprime.</p>
+                <p><strong>Sube una imagen</strong> para {NOMBRE_ZONA[zona].toLowerCase()}</p>
+                <p className="soltar__ayuda">
+                  PNG, JPG o WEBP de hasta 25 MB.{zona.startsWith('manga') ? ` En la manga cabe hasta ${lim.ancho} × ${lim.alto} cm.` : ' Mientras más grande, mejor se imprime.'}
+                </p>
                 <button type="button" className="boton boton--papel" onClick={() => entrada.current?.click()}>Elegir archivo</button>
                 <input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" className="solo-lectores" tabIndex={-1} onChange={(e) => { subir(e.target.files?.[0]); e.target.value = '' }} />
               </div>
-              <p className="muestras__titulo">O empieza con un diseño de Orion Flare:</p>
+              <p className="muestras__titulo">O usa un diseño de Orion Flare:</p>
               <div className="muestras">
                 {MUESTRAS.map((m) => (
                   <button type="button" key={m.id} className="muestra" onClick={() => usarMuestra(m.id)}>{m.nombre}</button>
                 ))}
               </div>
+              {agregando && capasZona.length > 0 && (
+                <button type="button" className="enlace" onClick={() => { setAgregando(false); setActivaId(capasZona[0].id) }}>Cancelar</button>
+              )}
             </>
-          ) : (
+          )}
+
+          {activa && !mostrarSubida && (
             <div className="diseno">
-              <div className="diseno__cabeza">
-                <Miniatura lienzo={actual.actual} />
-                <div>
-                  <p className="diseno__nombre">{actual.nombre}</p>
-                  <p className="diseno__px">{actual.actual.width} × {actual.actual.height} px</p>
-                  <p className={`calidad calidad--${calidad.nivel}`}>
-                    <span>{Math.round(dpi)} DPI</span> {calidad.texto}
-                  </p>
-                </div>
-              </div>
+              <p className={`calidad calidad--${calidad.nivel}`}>
+                <span>{Math.round(dpi)} DPI</span> {calidad.texto} · {activa.actual.width} × {activa.actual.height} px
+              </p>
 
               <div className="herramientas">
                 <button type="button" className="herramienta" disabled={!!ocupado} onClick={() => herramienta((c) => quitarFondoLiso(c), 'Quitando el fondo…')}>
@@ -400,33 +481,37 @@ export default function Crear() {
               </div>
               <div className="diseno__acciones">
                 <button type="button" className="enlace" disabled={!!ocupado} onClick={() => herramienta((c) => quitarFondoLiso(c, 38, true), 'Quitando el color de fondo…')}>Quitar ese color también por dentro</button>
-                <button type="button" className="enlace" disabled={!!ocupado || actual.actual === actual.original} onClick={() => actualizar({ actual: actual.original })}>Deshacer cambios</button>
-                <button type="button" className="enlace enlace--peligro" disabled={!!ocupado} onClick={() => setLados((p) => ({ ...p, [lado]: null }))}>Quitar diseño del {lado}</button>
+                <button type="button" className="enlace" disabled={!!ocupado || activa.actual === activa.original} onClick={() => actualizar({ actual: activa.original })}>Deshacer cambios</button>
               </div>
 
               <div className="medidas">
                 <label className="control">
-                  <span>Ancho <output>{actual.anchoCm.toFixed(1)} cm</output></span>
-                  <input type="range" min={4} max={max.ancho} step={0.5} value={actual.anchoCm} onChange={(e) => actualizar({ anchoCm: Number(e.target.value) })} />
+                  <span>Ancho <output>{activa.anchoCm.toFixed(1)} cm</output></span>
+                  <input type="range" min={limites(zona).minAncho} max={lim.ancho} step={0.5} value={activa.anchoCm} onChange={(e) => actualizar({ anchoCm: Number(e.target.value) })} />
                 </label>
-                <p className="control__dato">Alto: <strong>{altoDe(actual).toFixed(1)} cm</strong> · máximo para esta talla {max.ancho} × {max.alto} cm</p>
+                <p className="control__dato">Alto: <strong>{altoDe(activa).toFixed(1)} cm</strong> · máximo en {NOMBRE_ZONA[zona].toLowerCase()}: {lim.ancho} × {lim.alto} cm</p>
                 <label className="control">
-                  <span>Distancia desde el hombro <output>{actual.y.toFixed(1)} cm</output></span>
-                  <input type="range" min={3} max={Math.max(3, medidas.largo - altoDe(actual) - 4)} step={0.5} value={actual.y} onChange={(e) => actualizar({ y: Number(e.target.value) })} />
+                  <span>{zona.startsWith('manga') ? 'Distancia desde la costura del hombro' : 'Distancia desde el hombro'} <output>{activa.y.toFixed(1)} cm</output></span>
+                  <input type="range" min={1.5} max={Math.max(1.5, lim.largo - altoDe(activa) - (zona.startsWith('manga') ? 2.5 : 4))} step={0.5} value={activa.y} onChange={(e) => actualizar({ y: Number(e.target.value) })} />
                 </label>
                 <label className="control">
-                  <span>Posición horizontal <output>{actual.x === 0 ? 'centrado' : `${Math.abs(actual.x).toFixed(1)} cm a la ${actual.x > 0 ? 'derecha' : 'izquierda'}`}</output></span>
-                  <input type="range" min={-(medidas.ancho / 2)} max={medidas.ancho / 2} step={0.5} value={actual.x} onChange={(e) => actualizar({ x: Math.abs(Number(e.target.value)) < 0.6 ? 0 : Number(e.target.value) })} />
+                  <span>Posición horizontal <output>{activa.x === 0 ? 'centrado' : `${Math.abs(activa.x).toFixed(1)} cm a la ${activa.x > 0 ? 'derecha' : 'izquierda'}`}</output></span>
+                  <input type="range" min={-lim.mitad} max={lim.mitad} step={0.5} value={activa.x} onChange={(e) => actualizar({ x: Math.abs(Number(e.target.value)) < 0.6 ? 0 : Number(e.target.value) })} />
                 </label>
-                <div className="atajos">
-                  <button type="button" className="opcion" onClick={() => actualizar({ x: 0, y: lado === 'frente' ? 9 : 7, anchoCm: Math.min(28, max.ancho) })}>Centrado grande</button>
-                  {lado === 'frente' && (
-                    <button type="button" className="opcion" onClick={() => actualizar({ anchoCm: 9, x: medidas.ancho * 0.22, y: 11 })}>Pecho (logo pequeño)</button>
-                  )}
-                  {lado === 'espalda' && (
-                    <button type="button" className="opcion" onClick={() => actualizar({ anchoCm: max.ancho, x: 0, y: 7 })}>Espalda completa</button>
-                  )}
-                </div>
+                {!zona.startsWith('manga') && (
+                  <div className="atajos">
+                    <button type="button" className="opcion" onClick={() => actualizar({ x: 0, y: zona === 'frente' ? 9 : 7, anchoCm: Math.min(28, lim.ancho) })}>Centrado grande</button>
+                    {zona === 'frente' && (
+                      <button type="button" className="opcion" onClick={() => actualizar({ anchoCm: 9, x: medidas.ancho * 0.22, y: 11 })}>Pecho (logo pequeño)</button>
+                    )}
+                    {zona === 'espalda' && (
+                      <>
+                        <button type="button" className="opcion" onClick={() => actualizar({ anchoCm: 8, x: 0, y: 4 })}>Nuca (pequeño)</button>
+                        <button type="button" className="opcion" onClick={() => actualizar({ anchoCm: lim.ancho, x: 0, y: 7 })}>Espalda completa</button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -475,14 +560,14 @@ export default function Crear() {
           </div>
           <label className="check">
             <input type="checkbox" checked={derechos} onChange={(e) => setDerechos(e.target.checked)} />
-            <span>Declaro que el diseño es mío o tengo permiso para imprimirlo, y que no infringe derechos de terceros.</span>
+            <span>Declaro que los diseños son míos o tengo permiso para imprimirlos, y que no infringen derechos de terceros.</span>
           </label>
           <label className="check">
             <input type="checkbox" checked={terminos} onChange={(e) => setTerminos(e.target.checked)} />
             <span>Acepto los <Link to="/legal/terminos" target="_blank">términos y condiciones</Link> y la <Link to="/legal/privacidad" target="_blank">política de privacidad</Link>.</span>
           </label>
           <p className="paso__nota">Usamos tus datos solo para preparar y enviar este pedido. {NOTA_ENVIO}</p>
-          {!supabaseActivo && <p className="paso__nota">Al enviar se descargan los archivos de tu diseño para que nos los mandes por WhatsApp.</p>}
+          {!supabaseActivo && <p className="paso__nota">Al enviar se descargan los archivos de tus diseños para que nos los mandes por WhatsApp.</p>}
         </fieldset>
 
         <div className="resumen">
@@ -492,8 +577,8 @@ export default function Crear() {
               <input type="number" min={1} max={50} value={cantidad} onChange={(e) => setCantidad(Math.min(50, Math.max(1, Number(e.target.value) || 1)))} />
             </label>
             <div className="resumen__total" aria-live="polite">
-              <span>{ladosConDiseno.length ? `${formatoUSD(precio.unitario)} c/u` : 'Agrega un diseño'}</span>
-              <strong>{formatoUSD(ladosConDiseno.length ? precio.total : 0)}</strong>
+              <span>{capas.length ? `${formatoUSD(precio.unitario)} c/u · ${capas.length} diseño${capas.length > 1 ? 's' : ''}` : 'Agrega un diseño'}</span>
+              <strong>{formatoUSD(capas.length ? precio.total : 0)}</strong>
             </div>
           </div>
           <p className="resumen__nota">{NOTA_ENVIO}</p>
@@ -501,7 +586,7 @@ export default function Crear() {
           <button type="submit" className="boton boton--grande resumen__enviar" disabled={!!enviando || !!ocupado}>
             {enviando ?? 'Enviar pedido'}
           </button>
-          {!supabaseActivo && <p className="resumen__nota">Al enviar se descargan los archivos de tu diseño para que nos los mandes por WhatsApp al {NEGOCIO.whatsappLegible}.</p>}
+          {!supabaseActivo && <p className="resumen__nota">Al enviar se descargan los archivos de tus diseños para que nos los mandes por WhatsApp al {NEGOCIO.whatsappLegible}.</p>}
         </div>
       </form>
     </div>
